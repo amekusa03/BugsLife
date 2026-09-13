@@ -16,6 +16,27 @@ It operates on a **Mutual Watching Model** where all connected devices act as bo
 
 ---
 
+## 💡 Philosophy & Policy
+
+### 🤝 Equal, Peer-to-Peer Mutual Watching
+- **Eliminating "Watcher vs Watched" Hierarchies**: Unlike traditional surveillance-style monitoring apps that enforce an asymmetrical relationship (e.g., watcher vs. watched), BugsLife is designed on the principle of **equal peers caring for each other's safety and well-being**.
+- **Minimizing Psychological Burden**: Removes the uncomfortable feeling of being constantly monitored, allowing loved ones to naturally stay informed of each other's safety through ordinary smartphone activity (e.g., turning on the screen).
+
+---
+
+## 🔒 Security & Privacy
+
+1. **Robust Encrypted Protocol via SkyWay**:
+   - Powered by NTT Communications SkyWay platform, utilizing battle-tested WebRTC encryption protocols (DTLS-SRTP / SCTP over DTLS) to protect against eavesdropping and data tampering.
+2. **Minimal Data Transmission (User Status Only)**:
+   - Data sent is strictly limited to non-intrusive personal status indicators (such as Screen-ON activity heartbeats or "Feeling Good / Not Well" signals).
+   - No GPS locations, camera feeds, voice recordings, or device activity logs are ever accessed or transmitted.
+3. **Completely Serverless & Zero Server-Side Storage (Direct P2P)**:
+   - Operates entirely on direct P2P connections; no user data, messages, or activity histories are stored on central cloud servers.
+   - Even in the unlikely event of external security incidents, personal safety records cannot be leaked as they simply do not exist on any server.
+
+---
+
 ## 🌟 Key Features
 
 1. **Internet P2P Communication (SkyWay WebRTC DataChannel)**:
