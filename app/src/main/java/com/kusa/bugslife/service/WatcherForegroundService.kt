@@ -15,8 +15,8 @@ import com.kusa.bugslife.data.PacketType
 import com.kusa.bugslife.data.PeerInfo
 import com.kusa.bugslife.data.SafetyPacket
 import com.kusa.bugslife.data.WatcherStateHolder
+import com.kusa.bugslife.network.CompositePeerMessenger
 import com.kusa.bugslife.network.PeerMessenger
-import com.kusa.bugslife.network.UdpPeerMessenger
 import com.kusa.bugslife.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +31,7 @@ class WatcherForegroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default)
 
     private lateinit var prefs: AppPreferences
-    private val messenger: PeerMessenger = UdpPeerMessenger()
+    private var messenger: PeerMessenger? = null
 
     private var screenReceiver: ScreenEventReceiver? = null
     private var watchdogJob: Job? = null
@@ -143,7 +143,8 @@ class WatcherForegroundService : Service() {
 
     private fun getServiceStatusSummary(): String {
         val peers = prefs.getPeers()
-        return "相互見守り稼働中: ピア ${peers.size} 台 (本日画面点灯: ${prefs.todayScreenOnCount}回)"
+        val skywayText = if (prefs.isSkyWayEnabled) " [SkyWay連携中]" else ""
+        return "相互見守り稼働中: ピア ${peers.size} 台$skywayText (本日画面点灯: ${prefs.todayScreenOnCount}回)"
     }
 
     private fun updateNotification() {
@@ -153,9 +154,20 @@ class WatcherForegroundService : Service() {
     }
 
     private fun setupListenersAndWatchdog() {
-        val port = prefs.port
-        messenger.startListening(port) { packet, remoteIp ->
-            handleIncomingPacket(packet, remoteIp)
+        messenger?.stopListening()
+
+        // UDP + SkyWay ハイブリッドメッセンジャーを初期化
+        messenger = CompositePeerMessenger(
+            context = applicationContext,
+            appId = prefs.skywayAppId,
+            secretKey = prefs.skywaySecretKey,
+            roomName = prefs.skywayRoomName,
+            memberName = prefs.userName,
+            isSkyWayEnabled = prefs.isSkyWayEnabled
+        ).apply {
+            startListening(prefs.port) { packet, remoteIp ->
+                handleIncomingPacket(packet, remoteIp)
+            }
         }
 
         registerScreenReceiver()
@@ -214,17 +226,19 @@ class WatcherForegroundService : Service() {
             val peers = prefs.getPeers()
             Log.d(tag, "Sending $type packet to ${peers.size} peer(s)")
 
-            val results = messenger.sendPacket(packet, peers)
-
-            if (peers.isEmpty()) {
-                messenger.broadcastPacket(packet, prefs.port)
+            val activeMessenger = messenger
+            if (activeMessenger != null) {
+                activeMessenger.sendPacket(packet, peers)
+                if (peers.isEmpty()) {
+                    activeMessenger.broadcastPacket(packet, prefs.port)
+                }
             }
 
             WatcherStateHolder.setLastSentTimestamp(packet.timestamp)
             WatcherStateHolder.addLog(
                 CommunicationLog(
                     isIncoming = false,
-                    peerName = if (peers.isNotEmpty()) "${peers.size}件の送信先" else "LANブロードキャスト",
+                    peerName = if (peers.isNotEmpty()) "${peers.size}件の送信先" else "一括同報 (SkyWay/LAN)",
                     packetType = type,
                     detail = message.ifBlank { type.label }
                 )
@@ -289,7 +303,7 @@ class WatcherForegroundService : Service() {
                         message = "接続OK"
                     )
                     val targetPeer = PeerInfo(name = packet.senderName, ipAddress = remoteIp, port = prefs.port)
-                    messenger.sendPacket(ackPacket, listOf(targetPeer))
+                    messenger?.sendPacket(ackPacket, listOf(targetPeer))
                 }
                 else -> {}
             }
@@ -343,7 +357,8 @@ class WatcherForegroundService : Service() {
         unregisterScreenReceiver()
         watchdogJob?.cancel()
         watchdogJob = null
-        messenger.stopListening()
+        messenger?.stopListening()
+        messenger = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

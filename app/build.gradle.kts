@@ -49,6 +49,11 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+
+    // SkyWay SDK (Core & Room)
+    implementation("com.ntt.skyway:core:2.2.0")
+    implementation("com.ntt.skyway:room:2.2.0")
+
     testImplementation(libs.junit)
     testImplementation("org.json:json:20231013")
     androidTestImplementation(platform(libs.androidx.compose.bom))

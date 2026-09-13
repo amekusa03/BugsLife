@@ -118,6 +118,8 @@ fun MainScreen(
                 lastSentTimestamp = lastSentTs,
                 peers = peers,
                 timeoutDurationMs = prefs.timeoutDurationMillis,
+                isSkyWayEnabled = prefs.isSkyWayEnabled,
+                skywayRoomName = prefs.skywayRoomName,
                 onSendStatus = { type ->
                     WatcherForegroundService.sendStatus(context, type)
                 },
@@ -176,17 +178,25 @@ fun MainScreen(
         )
     }
 
-    // 設定ダイアログ
+    // 設定ダイアログ (SkyWay AppID/Secret/RoomName対応)
     if (showSettingsDialog) {
         SettingsDialog(
             currentName = prefs.userName,
             currentPort = prefs.port,
             currentTimeoutMs = prefs.timeoutDurationMillis,
+            currentSkyWayEnabled = prefs.isSkyWayEnabled,
+            currentSkyWayAppId = prefs.skywayAppId,
+            currentSkyWaySecretKey = prefs.skywaySecretKey,
+            currentSkyWayRoomName = prefs.skywayRoomName,
             onDismiss = { showSettingsDialog = false },
-            onSave = { name, port, timeoutMs ->
+            onSave = { name, port, timeoutMs, isSkyWayEnabled, appId, secretKey, roomName ->
                 prefs.userName = name
                 prefs.port = port
                 prefs.timeoutDurationMillis = timeoutMs
+                prefs.isSkyWayEnabled = isSkyWayEnabled
+                prefs.skywayAppId = appId
+                prefs.skywaySecretKey = secretKey
+                prefs.skywayRoomName = roomName
                 onRequireServiceReload()
                 showSettingsDialog = false
             }

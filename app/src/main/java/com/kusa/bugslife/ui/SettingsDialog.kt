@@ -6,13 +6,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
@@ -26,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,12 +49,29 @@ fun SettingsDialog(
     currentName: String,
     currentPort: Int,
     currentTimeoutMs: Long,
+    currentSkyWayEnabled: Boolean,
+    currentSkyWayAppId: String,
+    currentSkyWaySecretKey: String,
+    currentSkyWayRoomName: String,
     onDismiss: () -> Unit,
-    onSave: (name: String, port: Int, timeoutMs: Long) -> Unit
+    onSave: (
+        name: String,
+        port: Int,
+        timeoutMs: Long,
+        isSkyWayEnabled: Boolean,
+        skywayAppId: String,
+        skywaySecretKey: String,
+        skywayRoomName: String
+    ) -> Unit
 ) {
     var name by remember { mutableStateOf(currentName) }
     var portStr by remember { mutableStateOf(currentPort.toString()) }
     var selectedTimeoutMs by remember { mutableStateOf(currentTimeoutMs) }
+
+    var isSkyWayEnabled by remember { mutableStateOf(currentSkyWayEnabled) }
+    var skywayAppId by remember { mutableStateOf(currentSkyWayAppId) }
+    var skywaySecretKey by remember { mutableStateOf(currentSkyWaySecretKey) }
+    var skywayRoomName by remember { mutableStateOf(currentSkyWayRoomName) }
 
     val localIp = remember { NetworkUtils.getLocalIpAddress() }
 
@@ -75,7 +97,7 @@ fun SettingsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // 自端末情報カード
                 Card(
@@ -87,17 +109,13 @@ fun SettingsDialog(
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                            Text("あなたの端末のIPアドレス", style = MaterialTheme.typography.labelMedium)
+                            Text("あなたの端末のIPアドレス (LAN)", style = MaterialTheme.typography.labelMedium)
                         }
                         Text(
                             text = localIp,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "相手の端末にこのIPアドレスを登録してもらってください",
-                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -111,6 +129,69 @@ fun SettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                HorizontalDivider()
+
+                // SkyWay インターネットP2P設定
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "SkyWay インターネット接続",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "外出先や4G/5G回線でもP2P通信",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isSkyWayEnabled,
+                        onCheckedChange = { isSkyWayEnabled = it }
+                    )
+                }
+
+                if (isSkyWayEnabled) {
+                    OutlinedTextField(
+                        value = skywayRoomName,
+                        onValueChange = { skywayRoomName = it },
+                        label = { Text("見守りグループ名 (Room名)") },
+                        leadingIcon = { Icon(Icons.Default.MeetingRoom, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "※同じグループ名を登録した端末同士で相互接続されます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = skywayAppId,
+                        onValueChange = { skywayAppId = it },
+                        label = { Text("SkyWay Application ID") },
+                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = skywaySecretKey,
+                        onValueChange = { skywaySecretKey = it },
+                        label = { Text("SkyWay Secret Key") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 HorizontalDivider()
 
@@ -147,7 +228,7 @@ fun SettingsDialog(
                 OutlinedTextField(
                     value = portStr,
                     onValueChange = { portStr = it },
-                    label = { Text("UDPポート番号 (初期値: 8888)") },
+                    label = { Text("LAN UDPポート番号 (初期値: 8888)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
@@ -158,7 +239,15 @@ fun SettingsDialog(
             Button(
                 onClick = {
                     val port = portStr.toIntOrNull() ?: 8888
-                    onSave(name.trim(), port, selectedTimeoutMs)
+                    onSave(
+                        name.trim(),
+                        port,
+                        selectedTimeoutMs,
+                        isSkyWayEnabled,
+                        skywayAppId.trim(),
+                        skywaySecretKey.trim(),
+                        skywayRoomName.trim()
+                    )
                 },
                 enabled = name.isNotBlank()
             ) {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Info
@@ -65,6 +66,8 @@ fun MutualWatchScreen(
     lastSentTimestamp: Long,
     peers: List<PeerInfo>,
     timeoutDurationMs: Long,
+    isSkyWayEnabled: Boolean,
+    skywayRoomName: String,
     onSendStatus: (PacketType) -> Unit,
     onAddPeer: () -> Unit,
     onEditPeer: (PeerInfo) -> Unit,
@@ -82,7 +85,6 @@ fun MutualWatchScreen(
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.JAPAN) }
     val fullTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm:ss", Locale.JAPAN) }
     val myLocalIp = remember { NetworkUtils.getLocalIpAddress() }
-    val timeoutHours = timeoutDurationMs.toDouble() / (1000 * 60 * 60)
 
     LazyColumn(
         modifier = Modifier
@@ -90,45 +92,73 @@ fun MutualWatchScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 自端末のIPアドレス表示カード
+        // ネットワーク接続状態カード (SkyWay & LAN)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                 )
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("あなたのIPアドレス", style = MaterialTheme.typography.labelSmall)
-                            Text(
-                                text = myLocalIp,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    if (isSkyWayEnabled) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Cloud,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "SkyWay インターネットP2P: 有効",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF2E7D32).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "Room: $skywayRoomName",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
-                    Text(
-                        text = "相手に伝える",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("LAN内IP: $myLocalIp", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text(
+                            text = "4G/5G・Wi-Fi両対応",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -328,7 +358,7 @@ fun MutualWatchScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "「相手を追加」から相手の端末のIPアドレスを登録するか、相手からパケットを受信すると自動登録されます。",
+                            text = "SkyWayが有効な場合、同一Room名の相手からパケットを受信すると自動的に一覧に登録されます。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -401,7 +431,7 @@ fun MutualWatchScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "IP: ${peer.ipAddress}:${peer.port}",
+                                        text = "接続: ${peer.ipAddress}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color.DarkGray
                                     )

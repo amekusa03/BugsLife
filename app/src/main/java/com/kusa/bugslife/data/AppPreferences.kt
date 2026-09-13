@@ -25,6 +25,23 @@ class AppPreferences(context: Context) {
         get() = prefs.getString("user_name", "ユーザー") ?: "ユーザー"
         set(value) = prefs.edit().putString("user_name", value).apply()
 
+    // SkyWay 認証設定
+    var skywayAppId: String
+        get() = prefs.getString("skyway_app_id", "dafe3d90-0a02-4682-9bba-50eb66e6854e") ?: "dafe3d90-0a02-4682-9bba-50eb66e6854e"
+        set(value) = prefs.edit().putString("skyway_app_id", value).apply()
+
+    var skywaySecretKey: String
+        get() = prefs.getString("skyway_secret_key", "f3JviJMS+8rTrgJ29fiE1GNv3NLqyLozp6PNm7pA2pk=") ?: "f3JviJMS+8rTrgJ29fiE1GNv3NLqyLozp6PNm7pA2pk="
+        set(value) = prefs.edit().putString("skyway_secret_key", value).apply()
+
+    var skywayRoomName: String
+        get() = prefs.getString("skyway_room_name", "family-mutual-room") ?: "family-mutual-room"
+        set(value) = prefs.edit().putString("skyway_room_name", value).apply()
+
+    var isSkyWayEnabled: Boolean
+        get() = prefs.getBoolean("is_skyway_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_skyway_enabled", value).apply()
+
     var port: Int
         get() = prefs.getInt("listen_port", 8888)
         set(value) = prefs.edit().putInt("listen_port", value).apply()
@@ -113,12 +130,12 @@ class AppPreferences(context: Context) {
         isAlert: Boolean = false
     ) {
         val peers = getPeers().toMutableList()
-        val index = peers.indexOfFirst { it.id == senderId || it.ipAddress == ipAddress }
+        val index = peers.indexOfFirst { it.id == senderId || (ipAddress.isNotBlank() && it.ipAddress == ipAddress) }
         if (index >= 0) {
             val current = peers[index]
             peers[index] = current.copy(
                 name = if (senderName.isNotBlank()) senderName else current.name,
-                ipAddress = ipAddress,
+                ipAddress = if (ipAddress.isNotBlank()) ipAddress else current.ipAddress,
                 lastSeenTimestamp = timestamp,
                 lastStatus = status,
                 lastMessage = message,
@@ -129,7 +146,7 @@ class AppPreferences(context: Context) {
                 PeerInfo(
                     id = senderId,
                     name = senderName,
-                    ipAddress = ipAddress,
+                    ipAddress = ipAddress.ifBlank { "SkyWay P2P" },
                     lastSeenTimestamp = timestamp,
                     lastStatus = status,
                     lastMessage = message,
