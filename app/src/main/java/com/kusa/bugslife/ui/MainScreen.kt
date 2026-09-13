@@ -1,6 +1,5 @@
 package com.kusa.bugslife.ui
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,7 +52,6 @@ fun MainScreen(
     // ダイアログ状態
     var showSettingsDialog by remember { mutableStateOf(false) }
     var editingPeer by remember { mutableStateOf<PeerInfo?>(null) }
-    var isAddingPeer by remember { mutableStateOf(false) }
     var showLogsSheet by remember { mutableStateOf(false) }
 
     // 監視State
@@ -123,13 +121,8 @@ fun MainScreen(
                 onSendStatus = { type ->
                     WatcherForegroundService.sendStatus(context, type)
                 },
-                onAddPeer = {
-                    editingPeer = null
-                    isAddingPeer = true
-                },
                 onEditPeer = { peer ->
                     editingPeer = peer
-                    isAddingPeer = true
                 },
                 onPingPeer = { peer ->
                     WatcherForegroundService.sendStatus(
@@ -149,23 +142,21 @@ fun MainScreen(
         }
     }
 
-    // ピア追加・編集ダイアログ
-    if (isAddingPeer) {
+    // ピア編集ダイアログ
+    editingPeer?.let { peerToEdit ->
         PeerEditDialog(
-            initialPeer = editingPeer,
-            onDismiss = { isAddingPeer = false },
+            peer = peerToEdit,
+            onDismiss = { editingPeer = null },
             onSave = { updatedPeer ->
                 val currentPeers = prefs.getPeers().toMutableList()
                 val index = currentPeers.indexOfFirst { it.id == updatedPeer.id }
                 if (index >= 0) {
                     currentPeers[index] = updatedPeer
-                } else {
-                    currentPeers.add(updatedPeer)
                 }
                 prefs.savePeers(currentPeers)
                 WatcherStateHolder.updatePeers(currentPeers)
                 onRequireServiceReload()
-                isAddingPeer = false
+                editingPeer = null
             },
             onDelete = { targetPeer ->
                 val currentPeers = prefs.getPeers().toMutableList()
@@ -173,7 +164,7 @@ fun MainScreen(
                 prefs.savePeers(currentPeers)
                 WatcherStateHolder.updatePeers(currentPeers)
                 onRequireServiceReload()
-                isAddingPeer = false
+                editingPeer = null
             }
         )
     }
@@ -182,16 +173,14 @@ fun MainScreen(
     if (showSettingsDialog) {
         SettingsDialog(
             currentName = prefs.userName,
-            currentPort = prefs.port,
             currentTimeoutMs = prefs.timeoutDurationMillis,
             currentSkyWayEnabled = prefs.isSkyWayEnabled,
             currentSkyWayAppId = prefs.skywayAppId,
             currentSkyWaySecretKey = prefs.skywaySecretKey,
             currentSkyWayRoomName = prefs.skywayRoomName,
             onDismiss = { showSettingsDialog = false },
-            onSave = { name, port, timeoutMs, isSkyWayEnabled, appId, secretKey, roomName ->
+            onSave = { name, timeoutMs, isSkyWayEnabled, appId, secretKey, roomName ->
                 prefs.userName = name
-                prefs.port = port
                 prefs.timeoutDurationMillis = timeoutMs
                 prefs.isSkyWayEnabled = isSkyWayEnabled
                 prefs.skywayAppId = appId

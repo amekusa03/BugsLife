@@ -58,8 +58,6 @@ data class SafetyPacket(
 data class PeerInfo(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val ipAddress: String,
-    val port: Int = 8888,
     val lastSeenTimestamp: Long = 0L,
     val lastStatus: PacketType? = null,
     val lastMessage: String = "",

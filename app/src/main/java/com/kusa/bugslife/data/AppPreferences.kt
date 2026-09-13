@@ -27,11 +27,11 @@ class AppPreferences(context: Context) {
 
     // SkyWay 認証設定
     var skywayAppId: String
-        get() = prefs.getString("skyway_app_id", "dafe3d90-0a02-4682-9bba-50eb66e6854e") ?: "dafe3d90-0a02-4682-9bba-50eb66e6854e"
+        get() = prefs.getString("skyway_app_id", "") ?: ""
         set(value) = prefs.edit().putString("skyway_app_id", value).apply()
 
     var skywaySecretKey: String
-        get() = prefs.getString("skyway_secret_key", "f3JviJMS+8rTrgJ29fiE1GNv3NLqyLozp6PNm7pA2pk=") ?: "f3JviJMS+8rTrgJ29fiE1GNv3NLqyLozp6PNm7pA2pk="
+        get() = prefs.getString("skyway_secret_key", "") ?: ""
         set(value) = prefs.edit().putString("skyway_secret_key", value).apply()
 
     var skywayRoomName: String
@@ -41,10 +41,6 @@ class AppPreferences(context: Context) {
     var isSkyWayEnabled: Boolean
         get() = prefs.getBoolean("is_skyway_enabled", true)
         set(value) = prefs.edit().putBoolean("is_skyway_enabled", value).apply()
-
-    var port: Int
-        get() = prefs.getInt("listen_port", 8888)
-        set(value) = prefs.edit().putInt("listen_port", value).apply()
 
     // 監視タイムアウト時間（ミリ秒） デフォルト: 24時間 (24 * 60 * 60 * 1000L)
     var timeoutDurationMillis: Long
@@ -86,8 +82,6 @@ class AppPreferences(context: Context) {
                 val peer = PeerInfo(
                     id = obj.getString("id"),
                     name = obj.getString("name"),
-                    ipAddress = obj.getString("ipAddress"),
-                    port = obj.optInt("port", 8888),
                     lastSeenTimestamp = obj.optLong("lastSeenTimestamp", 0L),
                     lastStatus = if (obj.has("lastStatus")) PacketType.fromString(obj.optString("lastStatus")) else null,
                     lastMessage = obj.optString("lastMessage", ""),
@@ -107,8 +101,6 @@ class AppPreferences(context: Context) {
             val obj = JSONObject()
             obj.put("id", peer.id)
             obj.put("name", peer.name)
-            obj.put("ipAddress", peer.ipAddress)
-            obj.put("port", peer.port)
             obj.put("lastSeenTimestamp", peer.lastSeenTimestamp)
             if (peer.lastStatus != null) {
                 obj.put("lastStatus", peer.lastStatus.name)
@@ -123,19 +115,17 @@ class AppPreferences(context: Context) {
     fun updatePeerStatus(
         senderId: String,
         senderName: String,
-        ipAddress: String,
         status: PacketType,
         timestamp: Long,
         message: String,
         isAlert: Boolean = false
     ) {
         val peers = getPeers().toMutableList()
-        val index = peers.indexOfFirst { it.id == senderId || (ipAddress.isNotBlank() && it.ipAddress == ipAddress) }
+        val index = peers.indexOfFirst { it.id == senderId }
         if (index >= 0) {
             val current = peers[index]
             peers[index] = current.copy(
                 name = if (senderName.isNotBlank()) senderName else current.name,
-                ipAddress = if (ipAddress.isNotBlank()) ipAddress else current.ipAddress,
                 lastSeenTimestamp = timestamp,
                 lastStatus = status,
                 lastMessage = message,
@@ -145,8 +135,7 @@ class AppPreferences(context: Context) {
             peers.add(
                 PeerInfo(
                     id = senderId,
-                    name = senderName,
-                    ipAddress = ipAddress.ifBlank { "SkyWay P2P" },
+                    name = if (senderName.isNotBlank()) senderName else "相手",
                     lastSeenTimestamp = timestamp,
                     lastStatus = status,
                     lastMessage = message,

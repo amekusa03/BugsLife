@@ -18,19 +18,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SentimentDissatisfied
 import androidx.compose.material.icons.filled.SentimentVerySatisfied
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiTethering
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -54,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kusa.bugslife.data.PacketType
 import com.kusa.bugslife.data.PeerInfo
-import com.kusa.bugslife.util.NetworkUtils
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,7 +65,6 @@ fun MutualWatchScreen(
     isSkyWayEnabled: Boolean,
     skywayRoomName: String,
     onSendStatus: (PacketType) -> Unit,
-    onAddPeer: () -> Unit,
     onEditPeer: (PeerInfo) -> Unit,
     onPingPeer: (PeerInfo) -> Unit,
     onTestScreenOn: () -> Unit
@@ -84,7 +79,6 @@ fun MutualWatchScreen(
 
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.JAPAN) }
     val fullTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm:ss", Locale.JAPAN) }
-    val myLocalIp = remember { NetworkUtils.getLocalIpAddress() }
 
     LazyColumn(
         modifier = Modifier
@@ -92,7 +86,7 @@ fun MutualWatchScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ネットワーク接続状態カード (SkyWay & LAN)
+        // ネットワーク接続状態カード (SkyWay)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -102,26 +96,26 @@ fun MutualWatchScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    if (isSkyWayEnabled) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Cloud,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "SkyWay インターネットP2P: 有効",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isSkyWayEnabled) "SkyWay 見守り接続: 有効" else "SkyWay 見守り接続: 停止中",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (isSkyWayEnabled) {
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = Color(0xFF2E7D32).copy(alpha = 0.15f)
@@ -135,29 +129,6 @@ fun MutualWatchScreen(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("LAN内IP: $myLocalIp", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                        }
-                        Text(
-                            text = "4G/5G・Wi-Fi両対応",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
@@ -319,15 +290,6 @@ fun MutualWatchScreen(
                         )
                     }
                 }
-
-                Button(
-                    onClick = onAddPeer,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("相手を追加")
-                }
             }
         }
 
@@ -358,7 +320,7 @@ fun MutualWatchScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "SkyWayが有効な場合、同一Room名の相手からパケットを受信すると自動的に一覧に登録されます。",
+                            text = "同一Room名（見守りグループ名）を設定した相手端末から通信を受信すると、自動的に一覧に登録されます。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -424,18 +386,11 @@ fun MutualWatchScreen(
                                     modifier = Modifier.size(28.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = peer.name,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "接続: ${peer.ipAddress}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.DarkGray
-                                    )
-                                }
+                                Text(
+                                    text = peer.name,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
 
                             Row {

@@ -12,11 +12,10 @@ import androidx.core.app.ServiceCompat
 import com.kusa.bugslife.data.AppPreferences
 import com.kusa.bugslife.data.CommunicationLog
 import com.kusa.bugslife.data.PacketType
-import com.kusa.bugslife.data.PeerInfo
 import com.kusa.bugslife.data.SafetyPacket
 import com.kusa.bugslife.data.WatcherStateHolder
-import com.kusa.bugslife.network.CompositePeerMessenger
 import com.kusa.bugslife.network.PeerMessenger
+import com.kusa.bugslife.network.SkyWayPeerMessenger
 import com.kusa.bugslife.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,12 +105,20 @@ class WatcherForegroundService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_SEND_STATUS -> {
+                if (messenger == null || !messenger!!.isListening()) {
+                    startForegroundWithNotification()
+                    setupListenersAndWatchdog()
+                }
                 val typeName = intent?.getStringExtra(EXTRA_STATUS_TYPE)
                 val msg = intent?.getStringExtra(EXTRA_STATUS_MESSAGE) ?: ""
                 val type = PacketType.fromString(typeName)
                 sendPacketToPeers(type, msg)
             }
             ACTION_SEND_SCREEN_ON -> {
+                if (messenger == null || !messenger!!.isListening()) {
+                    startForegroundWithNotification()
+                    setupListenersAndWatchdog()
+                }
                 handleScreenOnEvent()
             }
             ACTION_RELOAD_SETTINGS -> {
@@ -143,8 +150,7 @@ class WatcherForegroundService : Service() {
 
     private fun getServiceStatusSummary(): String {
         val peers = prefs.getPeers()
-        val skywayText = if (prefs.isSkyWayEnabled) " [SkyWay連携中]" else ""
-        return "相互見守り稼働中: ピア ${peers.size} 台$skywayText (本日画面点灯: ${prefs.todayScreenOnCount}回)"
+        return "相互見守り稼働中: 相手 ${peers.size} 台 (本日画面点灯: ${prefs.todayScreenOnCount}回)"
     }
 
     private fun updateNotification() {
@@ -156,18 +162,20 @@ class WatcherForegroundService : Service() {
     private fun setupListenersAndWatchdog() {
         messenger?.stopListening()
 
-        // UDP + SkyWay ハイブリッドメッセンジャーを初期化
-        messenger = CompositePeerMessenger(
-            context = applicationContext,
-            appId = prefs.skywayAppId,
-            secretKey = prefs.skywaySecretKey,
-            roomName = prefs.skywayRoomName,
-            memberName = prefs.userName,
-            isSkyWayEnabled = prefs.isSkyWayEnabled
-        ).apply {
-            startListening(prefs.port) { packet, remoteIp ->
-                handleIncomingPacket(packet, remoteIp)
+        if (prefs.isSkyWayEnabled) {
+            messenger = SkyWayPeerMessenger(
+                context = applicationContext,
+                appId = prefs.skywayAppId,
+                secretKey = prefs.skywaySecretKey,
+                roomName = prefs.skywayRoomName,
+                memberName = prefs.userName
+            ).apply {
+                startListening { packet ->
+                    handleIncomingPacket(packet)
+                }
             }
+        } else {
+            messenger = null
         }
 
         registerScreenReceiver()
@@ -223,34 +231,29 @@ class WatcherForegroundService : Service() {
                 message = message
             )
 
-            val peers = prefs.getPeers()
-            Log.d(tag, "Sending $type packet to ${peers.size} peer(s)")
+            Log.d(tag, "Sending $type packet via SkyWay")
+            val success = messenger?.sendPacket(packet) ?: false
 
-            val activeMessenger = messenger
-            if (activeMessenger != null) {
-                activeMessenger.sendPacket(packet, peers)
-                if (peers.isEmpty()) {
-                    activeMessenger.broadcastPacket(packet, prefs.port)
-                }
-            }
-
-            WatcherStateHolder.setLastSentTimestamp(packet.timestamp)
-            WatcherStateHolder.addLog(
-                CommunicationLog(
-                    isIncoming = false,
-                    peerName = if (peers.isNotEmpty()) "${peers.size}件の送信先" else "一括同報 (SkyWay/LAN)",
-                    packetType = type,
-                    detail = message.ifBlank { type.label }
+            if (success) {
+                WatcherStateHolder.setLastSentTimestamp(packet.timestamp)
+                WatcherStateHolder.addLog(
+                    CommunicationLog(
+                        isIncoming = false,
+                        peerName = "見守りグループ (${prefs.skywayRoomName})",
+                        packetType = type,
+                        detail = message.ifBlank { type.label }
+                    )
                 )
-            )
-
-            WatcherStateHolder.emitUiEvent("送信完了: ${type.emoji} ${type.label}")
+                WatcherStateHolder.emitUiEvent("送信完了: ${type.emoji} ${type.label}")
+            } else {
+                WatcherStateHolder.emitUiEvent("⚠️ 送信保留: SkyWay接続確立中")
+            }
         }
     }
 
-    private fun handleIncomingPacket(packet: SafetyPacket, remoteIp: String) {
+    private fun handleIncomingPacket(packet: SafetyPacket) {
         serviceScope.launch {
-            Log.d(tag, "Handling incoming packet: $packet from $remoteIp")
+            Log.d(tag, "Handling incoming packet: $packet")
 
             if (packet.senderId == prefs.userId) {
                 return@launch
@@ -259,7 +262,6 @@ class WatcherForegroundService : Service() {
             prefs.updatePeerStatus(
                 senderId = packet.senderId,
                 senderName = packet.senderName,
-                ipAddress = remoteIp,
                 status = packet.type,
                 timestamp = packet.timestamp,
                 message = packet.message,
@@ -272,7 +274,7 @@ class WatcherForegroundService : Service() {
             WatcherStateHolder.addLog(
                 CommunicationLog(
                     isIncoming = true,
-                    peerName = "${packet.senderName} ($remoteIp)",
+                    peerName = packet.senderName,
                     packetType = packet.type,
                     detail = packet.message.ifBlank { packet.type.label }
                 )
@@ -302,8 +304,7 @@ class WatcherForegroundService : Service() {
                         type = PacketType.ACK,
                         message = "接続OK"
                     )
-                    val targetPeer = PeerInfo(name = packet.senderName, ipAddress = remoteIp, port = prefs.port)
-                    messenger?.sendPacket(ackPacket, listOf(targetPeer))
+                    messenger?.sendPacket(ackPacket)
                 }
                 else -> {}
             }

@@ -10,8 +10,8 @@ class SkyWayTokenTest {
 
     @Test
     fun testSkyWayTokenGeneration() {
-        val appId = "dafe3d90-0a02-4682-9bba-50eb66e6854e"
-        val secretKey = "f3JviJMS+8rTrgJ29fiE1GNv3NLqyLozp6PNm7pA2pk="
+        val appId = "dummy-app-id-0000-0000-000000000000"
+        val secretKey = "dummy_secret_key_base64_for_testing_only="
 
         val token = SkyWayTokenUtil.createAuthToken(appId, secretKey)
         assertNotNull(token)

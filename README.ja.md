@@ -2,15 +2,15 @@
 
 [![Android](https://img.shields.io/badge/Platform-Android%206.0%2B%20(API%2023%2B)-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue.svg)](https://kotlinlang.org)
-[![SkyWay](https://img.shields.io/badge/WebRTC-SkyWay%20SDK%202.2.0-orange.svg)](https://skyway.ntt.com)
+[![SkyWay](https://img.shields.io/badge/WebRTC-SkyWay%20SDK%202.9.0-orange.svg)](https://skyway.ntt.com)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-purple.svg)](https://developer.android.com/jetpack/compose)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 [**English Document**](./README.md)
 
-**BugsLife（遠隔見守り）** は、遠方に住む家族・親類や知人同士がサーバーを介さずに直接端末同士で安否を確認し合える、分散型P2P相互見守りAndroidアプリケーションです。
+**BugsLife（遠隔見守り）** は、遠方に住む家族・親類や知人同士が専用の監視サーバーを介さず、端末同士で直接安否を確認し合える分散型P2P相互見守りAndroidアプリケーションです。
 
-同一Wi-Fi（LAN）内での直接通信に加え、**NTT Communications SkyWay（WebRTC DataChannel）** によるNAT越え・4G/5G回線経由でのインターネット越しのP2P通信に対応しています。
+**NTT Communications SkyWay（WebRTC DataChannel）** によるNAT越え・4G/5G回線経由でのインターネット越しのP2P通信に対応しており、共通のグループ名（Room名）を設定するだけで自動的に接続されます。
 
 全端末がお互いを常時見守り合う **「相互見守りモデル」** を採用しています。
 
@@ -18,12 +18,12 @@
 
 ## 🌟 主な機能
 
-1. **インターネット & LAN ハイブリッドP2P通信 (SkyWay + UDP)**:
-   - **インターネット**: NTT Communications SkyWay SDKを利用し、STUN/TURNによるNAT・ファイアウォール越えでモバイル回線（4G/5G）や異なるWi-Fiネットワーク間でもP2P通信を実現。
-   - **LAN**: 同一ネットワーク内では超低遅延なUDPダイレクト通信を併用。
+1. **インターネットP2P通信 (SkyWay WebRTC DataChannel)**:
+   - NTT Communications SkyWay SDKを利用し、STUN/TURNによるNAT・ファイアウォール越えでモバイル回線（4G/5G）や異なるWi-Fiネットワーク間でも安定したP2P通信を実現。
+   - 共通のグループ名（Room名）を設定するだけで、面倒なIPアドレス入力なしで自動相互接続。
 
 2. **画面点灯（Screen ON）時の自動ハートビート送信 (P2P 1:n)**:
-   - スマートフォンの画面を点灯またはロック解除した際（`ACTION_SCREEN_ON` / `ACTION_USER_PRESENT`）に、登録されたすべての相手端末へ生存確認パケットを自動同報送信。
+   - スマートフォンの画面を点灯またはロック解除した際（`ACTION_SCREEN_ON` / `ACTION_USER_PRESENT`）に、見守りグループの相手端末へ生存確認パケットを自動同報送信。
    - 15秒間のデバウンス制御により、バッテリーや通信パケットの過剰消費を防止。
 
 3. **24時間無操作・未受信アラート (Watchdog)**:
@@ -37,13 +37,37 @@
 
 5. **相互見守り統合UI**:
    - 役割選択や複雑な切り替え不要の1画面レイアウト。
-   - 画面上部にSkyWayのRoom名および自端末のIPアドレスを常時明記。
+   - 画面上部にSkyWayのRoom名を明記。
    - 相手端末ごとのリアルタイム経過時間（「15分前」「23時間前」等）および状態バッジ（🟢 正常 / ⚠️ 24時間無反応 / 😄 元気 / 😣 良くない）を表示。
    - リアルタイム通信ログ確認シートを搭載。
 
 6. **幅広い端末対応**:
    - **Android 6.0 (API 23, Marshmallow) 〜 Android 15+** まで幅広く対応。
    - 常駐フォアグラウンドサービスにより、Dozeモード等のOS省電力制限下でも安定稼働。
+
+---
+
+## 🌐 SkyWayについて & APIキーの取得方法
+
+本アプリのインターネット越しのP2P通信には、NTT Communicationsが提供するWebRTCプラットフォーム **SkyWay** を使用しています。
+
+### SkyWayとは？
+- 端末間の直接暗号化通信（WebRTC）を仲介・中継するサービスです。
+- 監視サーバーに個人データや安否メッセージを保存することなく、4G/5Gや家庭内Wi-FiのNAT/ファイアウォールを安全に通過して直接端末間で通信できます。
+- **個人・開発者向けに無料枠（Freeプラン）** が提供されています。
+
+### SkyWay APIキー（App ID & Secret Key）の取得手順
+
+1. [SkyWay 公式ポータル (コンソール)](https://console.skyway.ntt.com/) にアクセスし、無料アカウント登録またはログインします。
+2. ダッシュボードのメニューから **「アプリケーション」** を選択し、**「新規作成」** ボタンをクリックします。
+3. アプリケーション名（例: `BugsLife`）を入力して作成します。
+4. 作成されたアプリケーションの詳細画面から、以下の2つの文字列をコピーします：
+   - **アプリケーションID (App ID)**: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (UUID形式)
+   - **シークレットキー (Secret Key)**: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=` (Base64形式)
+5. 見守りを行うすべての端末で、本アプリ起動後に右上の **設定 (⚙️)** を開き、上記で取得した **App ID** と **Secret Key** を入力して保存します。
+
+> [!TIP]
+> 見守り合うご家族同士で **同じ App ID、Secret Key、および見守りグループ名（Room名）** を設定することで、自動的にP2P接続が確立されます。
 
 ---
 
@@ -54,8 +78,6 @@
 - **常駐監視**: Android Foreground Service (`WatcherForegroundService`)
 - **P2P通信**:
   - **SkyWay WebRTC**: `SkyWayPeerMessenger` (P2PRoom & DataStream)
-  - **LAN UDP**: `UdpPeerMessenger` (DatagramSocket 1:n)
-  - **ハイブリッド中継**: `CompositePeerMessenger`
 
 ```mermaid
 graph LR
@@ -63,22 +85,21 @@ graph LR
         UI_A[Jetpack Compose UI]
         Service_A[常駐見守りサービス]
         Screen_A[画面点灯検知]
-        Composite_A[ハイブリッド通信層]
+        SkyWay_A[SkyWay WebRTC DataChannel]
     end
 
     subgraph 端末B [ピアB - 家族/親類]
         UI_B[Jetpack Compose UI]
         Service_B[常駐見守りサービス]
         Screen_B[画面点灯検知]
-        Composite_B[ハイブリッド通信層]
+        SkyWay_B[SkyWay WebRTC DataChannel]
     end
 
     Screen_A -->|画面ON検知| Service_A
     UI_A -->|「元気」「良くない」押下| Service_A
-    Service_A --> Composite_A
-    Composite_A <-->|インターネット: SkyWay WebRTC DataChannel| Composite_B
-    Composite_A <-->|同一LAN: Direct UDP| Composite_B
-    Composite_B --> Service_B
+    Service_A --> SkyWay_A
+    SkyWay_A <-->|インターネット: SkyWay P2PRoom| SkyWay_B
+    SkyWay_B --> Service_B
     Service_B -->|通知発出 & 状態更新| UI_B
     Service_B -->|24時間未受信アラート| UI_B
 ```
@@ -90,33 +111,33 @@ graph LR
 ### 必要な環境
 - Android 6.0（API 23）以上のAndroidスマートフォン 2台以上
 - インターネット接続（Wi-Fi または 4G/5Gモバイル回線）
+- SkyWay アカウント（無料）の App ID および Secret Key
 
 ### セットアップ手順
 1. 本アプリを2台のスマートフォン（端末A、端末B）にインストールして起動します。
 2. アプリ右上の **設定 (⚙️)** を開きます。
-   - **「SkyWay インターネット接続」** がONになっていることを確認します。
+   - **「SkyWay 見守り接続」** がONになっていることを確認します。
+   - **「SkyWay アプリケーションID」** と **「SkyWay シークレットキー」** を入力します。
    - **「見守りグループ名 (Room名)」** に2台共通の任意の合言葉（例: `tanaka-family-room`）を入力して保存します。
-3. 端末Aの画面を一度消灯し、再度点灯させると、端末B側の最終検知時刻がインターネット経由で自動更新されます。
+3. 端末Aの画面を一度消灯し、再度点灯させると、端末B側に端末Aが自動登録され、最終検知時刻がインターネット経由で自動更新されます。
 4. **「😄 元気です」** または **「😣 良くない」** ボタンをタップすると、相手端末へ即座にプッシュ通知が表示されます。
 5. 設定（⚙️）から無反応検知タイムアウトを **「1分」** に設定し、1分間画面を点灯させずに放置すると、**「⚠️ 安否警告」通知** が鳴動することを確認できます。
 
 ---
 
-## 🗺 ロードマップ
+## 🗺 開発状況
 
-- [x] **フェーズ1: 同一LAN内 P2P (UDP)**
+- [x] **常駐見守りコアシステム**
   - 画面点灯ブロードキャスト検知 & 常駐フォアグラウンドサービス
-  - 1:n UDPパケット同報送信
-  - 24時間無操作・未受信Watchdogアラート
-  - 大型ステータス通知ボタン
-  - Android 6.0+ サポート
-- [x] **フェーズ2: インターネット対応 (SkyWay WebRTC)**
-  - SkyWay SDK v2.2.0 (P2PRoom & DataStream) 統合
-  - JWT Auth Token 自動生成機構
-  - 4G/5G回線 & 異ネットワーク間でのP2P NAT越え
-  - LAN UDP & SkyWay ハイブリッド通信
-- [ ] **フェーズ3: QRコードによるワンタッチペアリング**
-  - カメラ読み取りによるグループRoom名・キーの共有
+  - 24時間無操作・未受信Watchdogアラート（通知・音・バイブレーション）
+  - 大型クイックステータス通知ボタン（「元気です」「良くない」）
+  - Android 6.0 (API 23) 〜 Android 15+ 完全互換
+- [x] **インターネットP2P通信 (SkyWay WebRTC)**
+  - SkyWay SDK v2.9.0 (P2PRoom & DataStream) 統合
+  - JWT Auth Token 自動署名・生成機構
+  - 4G/5G回線 & 異ネットワーク間でのP2P NAT越え（STUN/TURN）
+  - Room名による自動ピアリング & メッセージ配信
+  - リアルタイム通信ログ確認機能
 
 ---
 

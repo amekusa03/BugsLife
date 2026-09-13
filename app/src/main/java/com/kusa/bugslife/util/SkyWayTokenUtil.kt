@@ -10,11 +10,12 @@ import javax.crypto.spec.SecretKeySpec
 object SkyWayTokenUtil {
     /**
      * SkyWay AppID と SecretKey から クライアント用 Auth Token (JWT) を生成
+     * @skyway-sdk/token の仕様に完全準拠
      */
     fun createAuthToken(
         appId: String,
         secretKey: String,
-        durationSeconds: Long = 30 * 24 * 60 * 60L // 30日間有効
+        durationSeconds: Long = 6 * 60 * 60L // 6時間有効 (SkyWay上限: 24h)
     ): String {
         val now = System.currentTimeMillis() / 1000
         val exp = now + durationSeconds
@@ -24,34 +25,28 @@ object SkyWayTokenUtil {
             put("typ", "JWT")
         }
 
-        val allActions = JSONArray(listOf("write", "create", "delete"))
+        val writeAction = JSONArray(listOf("write"))
 
         val memberRule = JSONObject().apply {
             put("id", "*")
             put("name", "*")
-            put("actions", allActions)
-            put("publication", JSONObject().apply { put("actions", allActions) })
-            put("subscription", JSONObject().apply { put("actions", allActions) })
+            put("actions", writeAction)
+            put("publication", JSONObject().apply { put("actions", writeAction) })
+            put("subscription", JSONObject().apply { put("actions", writeAction) })
         }
 
         val channelRule = JSONObject().apply {
             put("id", "*")
             put("name", "*")
-            put("actions", allActions)
+            put("actions", writeAction)
             put("members", JSONArray().apply { put(memberRule) })
-            put("sfuBots", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("actions", allActions)
-                    put("forwardings", JSONObject().apply { put("actions", allActions) })
-                })
-            })
         }
 
         val appScope = JSONObject().apply {
             put("id", appId)
-            put("turn", true)
             put("actions", JSONArray(listOf("read")))
             put("channels", JSONArray().apply { put(channelRule) })
+            put("turn", true)
         }
 
         val payloadObj = JSONObject().apply {
@@ -73,12 +68,7 @@ object SkyWayTokenUtil {
 
     private fun hmacSha256(data: String, key: String): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
-        val keyBytes = try {
-            base64Decode(key)
-        } catch (e: Exception) {
-            key.toByteArray(StandardCharsets.UTF_8)
-        }
-        val secretKeySpec = SecretKeySpec(keyBytes, "HmacSHA256")
+        val secretKeySpec = SecretKeySpec(key.toByteArray(StandardCharsets.UTF_8), "HmacSHA256")
         mac.init(secretKeySpec)
         return mac.doFinal(data.toByteArray(StandardCharsets.UTF_8))
     }
@@ -87,7 +77,6 @@ object SkyWayTokenUtil {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         } else {
-            // Android 6.0 / 7.0 互換フォールバック
             try {
                 android.util.Base64.encodeToString(
                     bytes,
@@ -95,18 +84,6 @@ object SkyWayTokenUtil {
                 ).trim()
             } catch (e: Throwable) {
                 java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-            }
-        }
-    }
-
-    private fun base64Decode(str: String): ByteArray {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            java.util.Base64.getDecoder().decode(str.trim())
-        } else {
-            try {
-                android.util.Base64.decode(str.trim(), android.util.Base64.DEFAULT)
-            } catch (e: Throwable) {
-                java.util.Base64.getDecoder().decode(str.trim())
             }
         }
     }

@@ -2,13 +2,15 @@
 
 [![Android](https://img.shields.io/badge/Platform-Android%206.0%2B%20(API%2023%2B)-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue.svg)](https://kotlinlang.org)
-[![SkyWay](https://img.shields.io/badge/WebRTC-SkyWay%20SDK%202.2.0-orange.svg)](https://skyway.ntt.com)
+[![SkyWay](https://img.shields.io/badge/WebRTC-SkyWay%20SDK%202.9.0-orange.svg)](https://skyway.ntt.com)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-purple.svg)](https://developer.android.com/jetpack/compose)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 [**日本語ドキュメント (Japanese)**](./README.ja.md)
 
-**BugsLife** is a decentralized, peer-to-peer (P2P) safety monitoring Android application designed to keep distant family members, relatives, and friends connected and safe across both local networks (Wi-Fi) and the Internet (4G/5G mobile networks) without centralized surveillance servers or account registrations.
+**BugsLife** is a decentralized, peer-to-peer (P2P) safety monitoring Android application designed to keep distant family members, relatives, and friends connected and safe across the Internet (Wi-Fi and 4G/5G mobile networks) without centralized surveillance servers or account registrations.
+
+It connects devices seamlessly via **NTT Communications SkyWay (WebRTC DataChannel)** simply by setting a shared group/room name.
 
 It operates on a **Mutual Watching Model** where all connected devices act as both sender and watcher.
 
@@ -16,12 +18,12 @@ It operates on a **Mutual Watching Model** where all connected devices act as bo
 
 ## 🌟 Key Features
 
-1. **Internet & Local Network Hybrid P2P (SkyWay WebRTC + UDP)**:
-   - **Internet**: Seamlessly connects across mobile data (4G/5G) and separate Wi-Fi networks using **NTT Communications SkyWay WebRTC DataChannel** with STUN/TURN NAT traversal.
-   - **Local Network**: Direct ultra-low-latency UDP datagram communication when on the same LAN.
+1. **Internet P2P Communication (SkyWay WebRTC DataChannel)**:
+   - Seamlessly connects across mobile data (4G/5G) and Wi-Fi networks using **NTT Communications SkyWay WebRTC DataChannel** with STUN/TURN NAT traversal.
+   - Devices in the same Room automatically discover each other without manual IP entry.
 
 2. **Automatic Screen-ON Heartbeat (P2P 1:n)**:
-   - When you turn ON or unlock your smartphone screen (`ACTION_SCREEN_ON` / `ACTION_USER_PRESENT`), an automatic heartbeat signal is sent to all registered peer devices.
+   - When you turn ON or unlock your smartphone screen (`ACTION_SCREEN_ON` / `ACTION_USER_PRESENT`), an automatic heartbeat signal is sent to all group members.
    - Built-in debounce mechanism (15 seconds) prevents unnecessary battery and network drain.
 
 3. **24-Hour Inactivity Watchdog Alert**:
@@ -35,13 +37,37 @@ It operates on a **Mutual Watching Model** where all connected devices act as bo
 
 5. **Mutual Watching Unified Interface**:
    - Single unified screen: No complex role selection needed.
-   - Prominently displays SkyWay Room Name and local IP address for easy exchange and pairing.
+   - Displays the current SkyWay Room Name.
    - Real-time elapsed time counters (e.g. "15 minutes ago", "23 hours ago") for every peer.
    - Real-time communication logs inspection bottom sheet.
 
 6. **Broad Device Compatibility**:
    - Supports **Android 6.0 (API 23, Marshmallow) up to Android 15+**.
    - Stable background operation via persistent Foreground Service.
+
+---
+
+## 🌐 About SkyWay & Getting API Keys
+
+BugsLife uses **SkyWay**, an enterprise-grade WebRTC communication platform provided by NTT Communications, for secure end-to-end P2P DataChannel networking.
+
+### Why SkyWay?
+- Direct, encrypted peer-to-peer communication without storing private data on third-party servers.
+- Automatic STUN/TURN NAT and firewall traversal across 4G/5G mobile carriers and home Wi-Fi networks.
+- **Free tier available for developers and personal use.**
+
+### How to Get Your SkyWay API Keys
+
+1. Go to the [SkyWay Console](https://console.skyway.ntt.com/) and create a free account or log in.
+2. In the dashboard menu, navigate to **"Applications"** and click **"Create Application"**.
+3. Enter an application name (e.g., `BugsLife`) and submit.
+4. From the application details page, copy the following two credentials:
+   - **Application ID (App ID)**: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (UUID format)
+   - **Secret Key**: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=` (Base64 string)
+5. On all watching devices, open BugsLife, tap **Settings (⚙️)** in the top right corner, and enter the **App ID** and **Secret Key**.
+
+> [!TIP]
+> Ensure all family/group members configure the **same App ID, Secret Key, and Room Name** to automatically connect with each other.
 
 ---
 
@@ -52,8 +78,6 @@ It operates on a **Mutual Watching Model** where all connected devices act as bo
 - **Service**: Android Foreground Service (`WatcherForegroundService`)
 - **Networking**:
   - **SkyWay WebRTC**: `SkyWayPeerMessenger` (P2PRoom & DataStream)
-  - **LAN UDP**: `UdpPeerMessenger` (DatagramSocket 1:n)
-  - **Hybrid**: `CompositePeerMessenger`
 
 ```mermaid
 graph LR
@@ -61,22 +85,21 @@ graph LR
         UI_A[Jetpack Compose UI]
         Service_A[WatcherForegroundService]
         Screen_A[Screen-ON Receiver]
-        Composite_A[CompositePeerMessenger]
+        SkyWay_A[SkyWay WebRTC DataChannel]
     end
 
     subgraph Device B [Peer B - Family/Relative]
         UI_B[Jetpack Compose UI]
         Service_B[WatcherForegroundService]
         Screen_B[Screen-ON Receiver]
-        Composite_B[CompositePeerMessenger]
+        SkyWay_B[SkyWay WebRTC DataChannel]
     end
 
     Screen_A -->|Screen Turned ON| Service_A
     UI_A -->|Tap 'Fine' / 'Unwell'| Service_A
-    Service_A --> Composite_A
-    Composite_A <-->|Internet: SkyWay WebRTC DataChannel| Composite_B
-    Composite_A <-->|LAN: Direct UDP Datagram| Composite_B
-    Composite_B --> Service_B
+    Service_A --> SkyWay_A
+    SkyWay_A <-->|Internet: SkyWay P2PRoom| SkyWay_B
+    SkyWay_B --> Service_B
     Service_B -->|Push Notification & Status Update| UI_B
     Service_B -->|24h Inactivity Watchdog| UI_B
 ```
@@ -89,6 +112,7 @@ graph LR
 - Android Studio Ladybug or newer / JDK 17+
 - Android Device or Emulator running Android 6.0+ (API 23+)
 - Internet connection (Wi-Fi or Mobile Data)
+- SkyWay Account (Free) App ID and Secret Key
 
 ### Installation & Run
 
@@ -114,28 +138,27 @@ graph LR
 
 1. Launch **BugsLife** on two or more Android devices.
 2. Open **Settings (⚙️)**:
-   - Ensure **SkyWay Internet Connection** is enabled.
+   - Ensure **SkyWay Connection** is enabled.
+   - Enter your **SkyWay App ID** and **Secret Key**.
    - Set the same **Room Name** (e.g. `tanaka-family-room`) on both devices.
-3. Turn off and turn on the screen on Device A: Device B will automatically update the last-seen status and time over the Internet!
+3. Turn off and turn on the screen on Device A: Device B will automatically discover Device A and update the last-seen status and time over the Internet!
 4. Tap **"😄 元気です"** or **"😣 良くない"** to send instant push notifications.
 
 ---
 
-## 🗺 Roadmap
+## 🗺 Development Status
 
-- [x] **Phase 1: Local Network P2P (LAN UDP)**
+- [x] **Persistent Watching Core System**
   - Screen-ON detection via BroadcastReceiver & Foreground Service
-  - 1:n direct UDP packet broadcast & unicast
-  - 24-hour inactivity watchdog & notification alert
-  - Senior-friendly large status buttons
-  - Android 6.0+ compatibility
-- [x] **Phase 2: Over-the-Internet P2P (SkyWay WebRTC)**
-  - SkyWay SDK v2.2.0 integration (P2PRoom & DataStream)
+  - 24-hour inactivity watchdog & alarm notification alert
+  - Senior-friendly large quick status buttons
+  - Android 6.0 (API 23) to Android 15+ full compatibility
+- [x] **Internet P2P Communication (SkyWay WebRTC)**
+  - SkyWay SDK v2.9.0 integration (P2PRoom & DataStream)
   - Automatic Auth Token JWT generation
-  - STUN/TURN NAT traversal across 4G/5G and separate Wi-Fi
-  - Hybrid fallback messaging (LAN UDP + SkyWay)
-- [ ] **Phase 3: QR Code Pairing**
-  - Instant camera scan to share Room Name and Keys
+  - STUN/TURN NAT traversal across 4G/5G and separate Wi-Fi networks
+  - Room name based automatic discovery & messaging
+  - Real-time communication logs inspection sheet
 
 ---
 
