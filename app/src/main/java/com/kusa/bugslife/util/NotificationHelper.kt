@@ -1,0 +1,172 @@
+package com.kusa.bugslife.util
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.kusa.bugslife.MainActivity
+import com.kusa.bugslife.R
+
+object NotificationHelper {
+    const val CHANNEL_SERVICE = "channel_watcher_service"
+    const val CHANNEL_ALERT = "channel_safety_alert"
+    const val CHANNEL_STATUS = "channel_status_updates"
+
+    const val NOTIFICATION_ID_SERVICE = 1001
+    const val NOTIFICATION_ID_ALERT_BASE = 2000
+    const val NOTIFICATION_ID_STATUS_BASE = 3000
+
+    fun createNotificationChannels(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            // 常駐サービス用
+            val serviceChannel = NotificationChannel(
+                CHANNEL_SERVICE,
+                "見守り常駐サービス",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "安否見守りと通信待受をバックグラウンドで維持します"
+                setShowBadge(false)
+            }
+
+            // 緊急・24時間無通信アラート用 (高優先度・音・バイブ)
+            val alertChannel = NotificationChannel(
+                CHANNEL_ALERT,
+                "安否警告アラート (重要)",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "24時間端末が無反応な場合や緊急時の通知"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 1000)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+
+            // 通常のステータス更新 (元気/良くない)
+            val statusChannel = NotificationChannel(
+                CHANNEL_STATUS,
+                "安否ステータス通知",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "親類からの元気・体調連絡通知"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
+            notificationManager.createNotificationChannels(
+                listOf(serviceChannel, alertChannel, statusChannel)
+            )
+        }
+    }
+
+    fun buildServiceNotification(
+        context: Context,
+        contentText: String
+    ): Notification {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(context, CHANNEL_SERVICE)
+            .setContentTitle("遠隔安否見守り 稼働中")
+            .setContentText(contentText)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    fun showInactivityAlert(
+        context: Context,
+        peerId: String,
+        peerName: String,
+        elapsedHours: Double
+    ) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            peerId.hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val hoursFormatted = String.format(java.util.Locale.JAPAN, "%.1f", elapsedHours)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERT)
+            .setContentTitle("⚠️ 安否警告: ${peerName}さんのスマホが無反応です")
+            .setContentText("${peerName}さんのスマホが約${hoursFormatted}時間操作されていません。")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "【安否確認のお願い】\n${peerName}さんのスマートフォンが ${hoursFormatted}時間 以上動いていません（画面点灯が検知されていません）。\n至急、電話等で安否を確認してください。"
+                )
+            )
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setVibrate(longArrayOf(0, 500, 300, 500, 300, 1000))
+            .build()
+
+        notificationManager.notify(NOTIFICATION_ID_ALERT_BASE + (peerId.hashCode() % 500), notification)
+    }
+
+    fun showStatusNotification(
+        context: Context,
+        senderName: String,
+        isFine: Boolean,
+        message: String?
+    ) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val title = if (isFine) "😄 ${senderName}さん: 元気です！" else "😣 ${senderName}さん: 体調が良くない"
+        val body = if (message.isNullOrBlank()) {
+            if (isFine) "${senderName}さんから「元気」の連絡が届きました。" else "${senderName}さんが「体調が良くない」と伝えています。"
+        } else {
+            message
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_STATUS)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        notificationManager.notify(
+            NOTIFICATION_ID_STATUS_BASE + ((senderName.hashCode() + System.currentTimeMillis()).toInt() % 500),
+            notification
+        )
+    }
+}
