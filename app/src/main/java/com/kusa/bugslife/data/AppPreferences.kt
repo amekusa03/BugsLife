@@ -61,6 +61,22 @@ class AppPreferences(context: Context) {
             prefs.edit().putInt("screen_on_count", value).apply()
         }
 
+    var lastLocalScreenOnTime: Long
+        get() = prefs.getLong("last_local_screen_on_time", System.currentTimeMillis())
+        set(value) = prefs.edit().putLong("last_local_screen_on_time", value).apply()
+
+    var myLastStatus: PacketType
+        get() = PacketType.fromString(prefs.getString("my_last_status", PacketType.HEARTBEAT.name))
+        set(value) = prefs.edit().putString("my_last_status", value.name).apply()
+
+    var myLastStatusMessage: String
+        get() = prefs.getString("my_last_status_message", "") ?: ""
+        set(value) = prefs.edit().putString("my_last_status_message", value).apply()
+
+    var lastSyncTimestamp: Long
+        get() = prefs.getLong("last_sync_timestamp", 0L)
+        set(value) = prefs.edit().putLong("last_sync_timestamp", value).apply()
+
     private fun checkAndResetDailyCount() {
         val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
         val savedDate = prefs.getString("screen_count_date", "")

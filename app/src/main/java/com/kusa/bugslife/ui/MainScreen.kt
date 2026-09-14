@@ -58,6 +58,9 @@ fun MainScreen(
     val logs by WatcherStateHolder.logs.collectAsState()
     val lastSentTs by WatcherStateHolder.lastSentTimestamp.collectAsState()
     val peers by WatcherStateHolder.peers.collectAsState()
+    val isSyncing by WatcherStateHolder.isSyncing.collectAsState()
+    val nextSyncTs by WatcherStateHolder.nextSyncTimestamp.collectAsState()
+    val lastSyncTs by WatcherStateHolder.lastSyncTimestamp.collectAsState()
 
     // リアルタイムUIイベントの監視
     LaunchedEffect(Unit) {
@@ -114,12 +117,18 @@ fun MainScreen(
             MutualWatchScreen(
                 todayScreenOnCount = prefs.todayScreenOnCount,
                 lastSentTimestamp = lastSentTs,
+                lastSyncTimestamp = lastSyncTs,
+                nextSyncTimestamp = nextSyncTs,
+                isSyncing = isSyncing,
                 peers = peers,
                 timeoutDurationMs = prefs.timeoutDurationMillis,
                 isSkyWayEnabled = prefs.isSkyWayEnabled,
                 skywayRoomName = prefs.skywayRoomName,
                 onSendStatus = { type ->
                     WatcherForegroundService.sendStatus(context, type)
+                },
+                onManualSync = {
+                    WatcherForegroundService.triggerManualSync(context)
                 },
                 onEditPeer = { peer ->
                     editingPeer = peer

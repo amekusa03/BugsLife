@@ -1,4 +1,4 @@
-# BugsLife (遠隔見守り) - P2P Mutual Safety Watcher
+# BugsLife - P2P Decentralized Mutual Watching App
 
 [![Android](https://img.shields.io/badge/Platform-Android%206.0%2B%20(API%2023%2B)-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue.svg)](https://kotlinlang.org)
@@ -8,59 +8,64 @@
 
 [**日本語ドキュメント (Japanese)**](./README.ja.md)
 
-**BugsLife** is a decentralized, peer-to-peer (P2P) safety monitoring Android application designed to keep distant family members, relatives, and friends connected and safe across the Internet (Wi-Fi and 4G/5G mobile networks) without centralized surveillance servers or account registrations.
+**BugsLife** is a decentralized, peer-to-peer (P2P) mutual safety-watching Android application that allows families, relatives, and close friends to effortlessly keep track of each other's well-being without relying on central surveillance servers.
 
 It connects devices seamlessly via **NTT Communications SkyWay (WebRTC DataChannel)** simply by setting a shared group/room name.
 
-It operates on a **Mutual Watching Model** where all connected devices act as both sender and watcher.
+It features an **Equal Mutual Watching Model** and an **Hourly XX:05 Sync Window Model (~7-8MB/month)** designed to minimize mobile data usage for senior-oriented low-capacity SIM plans (0.5GB - 3GB) and maximize battery efficiency.
 
 ---
 
 ## 💡 Philosophy & Policy
 
 ### 🤝 Equal, Peer-to-Peer Mutual Watching
-- **Eliminating "Watcher vs Watched" Hierarchies**: Unlike traditional surveillance-style monitoring apps that enforce an asymmetrical relationship (e.g., watcher vs. watched), BugsLife is designed on the principle of **equal peers caring for each other's safety and well-being**.
-- **Minimizing Psychological Burden**: Removes the uncomfortable feeling of being constantly monitored, allowing loved ones to naturally stay informed of each other's safety through ordinary smartphone activity (e.g., turning on the screen).
+- **Eliminating "Watcher vs Watched" Hierarchies**: Unlike traditional surveillance monitoring apps that enforce an asymmetrical relationship (e.g., watcher vs. watched), BugsLife is designed on the principle of **equal peers caring for each other's safety and well-being**.
+- **Minimizing Psychological Burden**: Removes the uncomfortable feeling of being constantly monitored, allowing loved ones to naturally stay informed of each other's safety through everyday phone use (unlocking the screen).
+- **Gentle, Non-Urgent Check-in**: "Not Well" status is not meant to replace emergency services (911/119), but rather to gently share physical conditions or requests for a hospital visit, which naturally allows comfortable hourly sync intervals without rush.
 
 ---
 
-## 🔒 Security & Privacy
+## 🔒 Security & Privacy & Safety
 
-1. **Robust Encrypted Protocol via SkyWay**:
-   - Powered by NTT Communications SkyWay platform, utilizing battle-tested WebRTC encryption protocols (DTLS-SRTP / SCTP over DTLS) to protect against eavesdropping and data tampering.
-2. **Minimal Data Transmission (User Status Only)**:
-   - Data sent is strictly limited to non-intrusive personal status indicators (such as Screen-ON activity heartbeats or "Feeling Good / Not Well" signals).
-   - No GPS locations, camera feeds, voice recordings, or device activity logs are ever accessed or transmitted.
-3. **Completely Serverless & Zero Server-Side Storage (Direct P2P)**:
+1. **Completely Serverless & Zero Data Storage (Direct P2P)**:
    - Operates entirely on direct P2P connections; no user data, messages, or activity histories are stored on central cloud servers.
    - Even in the unlikely event of external security incidents, personal safety records cannot be leaked as they simply do not exist on any server.
+2. **Minimal Data Transmission (User Status Only)**:
+   - Data sent is strictly limited to non-intrusive status indicators (such as daily unlock counts and "Fine / Unwell" signals).
+   - No GPS locations, camera feeds, voice recordings, or device activity logs are ever accessed or transmitted.
+3. **Eliminating False Triggers from Incoming Calls/Notifications (`ACTION_USER_PRESENT`)**:
+   - Only counts explicit user unlock actions (`ACTION_USER_PRESENT`), preventing screen wakeups from incoming phone calls, spam emails, or notifications from mistakenly counting as user activity.
+4. **Ultra-Low Data Usage via Hourly XX:05 Sync (~7-8MB/Month)**:
+   - Local phone unlocks are recorded locally with zero network usage. All devices briefly connect to SkyWay at 5 minutes past every hour (XX:05) for ~90 seconds to exchange status packets and immediately disconnect.
+   - Perfect for low-data mobile plans (0.5GB - 3GB/month), consuming only ~1.5% of the total monthly allowance.
 
 ---
 
 ## 🌟 Key Features
 
-1. **Internet P2P Communication (SkyWay WebRTC DataChannel)**:
-   - Seamlessly connects across mobile data (4G/5G) and Wi-Fi networks using **NTT Communications SkyWay WebRTC DataChannel** with STUN/TURN NAT traversal.
-   - Devices in the same Room automatically discover each other without manual IP entry.
+1. **Hourly XX:05 Sync Window (SkyWay WebRTC DataChannel)**:
+   - Synchronizes devices at XX:05 every hour (10:05, 11:05...), exchanging the latest status and immediately returning to deep sleep.
+   - Automatically connects via shared room name without configuring IP addresses.
 
-2. **Automatic Screen-ON Heartbeat (P2P 1:n)**:
-   - When you turn ON or unlock your smartphone screen (`ACTION_SCREEN_ON` / `ACTION_USER_PRESENT`), an automatic heartbeat signal is sent to all group members.
-   - Built-in debounce mechanism (15 seconds) prevents unnecessary battery and network drain.
+2. **Accurate User Activity Tracking (Screen Unlock)**:
+   - Detects when the user explicitly unlocks the screen (`ACTION_USER_PRESENT`) and increments the local count.
+   - Summarized as "Activity: X times today" during the XX:05 sync.
 
 3. **24-Hour Inactivity Watchdog Alert**:
    - Continuously tracks the last-seen active timestamp of all connected peers.
-   - If no screen-ON or heartbeat signal is received for **24 hours** (configurable from 1 min to 24 hours for testing), a high-priority alarm notification (sound, vibration, heads-up) is triggered.
+   - If no activity signal is received for **24 hours** (configurable from 1 min to 24 hours for testing), a high-priority alarm notification (sound, vibration, heads-up) is triggered.
 
-4. **One-Tap Quick Status Buttons**:
+4. **One-Tap Quick Status Buttons & Manual Sync**:
    - Senior-friendly, large tactile buttons:
      - **😄 Feeling Good (元気です)**: Informs everyone that you are doing great.
-     - **😣 Not Well (良くない)**: Promptly alerts all connected peers with high priority.
+     - **😣 Not Well (良くない)**: Promptly alerts all connected peers.
+   - **"Sync Now"** button for immediate on-demand synchronization anytime.
 
 5. **Mutual Watching Unified Interface**:
    - Single unified screen: No complex role selection needed.
-   - Displays the current SkyWay Room Name.
+   - Displays current sync state (Sleep / Syncing), Next Sync Time (e.g., 10:05), and Room Name.
    - Real-time elapsed time counters (e.g. "15 minutes ago", "23 hours ago") for every peer.
-   - Real-time communication logs inspection bottom sheet.
+   - Real-time communication logs inspection sheet.
 
 6. **Broad Device Compatibility**:
    - Supports **Android 6.0 (API 23, Marshmallow) up to Android 15+**.
@@ -105,21 +110,21 @@ graph LR
     subgraph Device A [Peer A - Family/Relative]
         UI_A[Jetpack Compose UI]
         Service_A[WatcherForegroundService]
-        Screen_A[Screen-ON Receiver]
+        Screen_A[Screen Unlock Activity Receiver]
         SkyWay_A[SkyWay WebRTC DataChannel]
     end
 
     subgraph Device B [Peer B - Family/Relative]
         UI_B[Jetpack Compose UI]
         Service_B[WatcherForegroundService]
-        Screen_B[Screen-ON Receiver]
+        Screen_B[Screen Unlock Activity Receiver]
         SkyWay_B[SkyWay WebRTC DataChannel]
     end
 
-    Screen_A -->|Screen Turned ON| Service_A
-    UI_A -->|Tap 'Fine' / 'Unwell'| Service_A
-    Service_A --> SkyWay_A
-    SkyWay_A <-->|Internet: SkyWay P2PRoom| SkyWay_B
+    Screen_A -->|Record Screen Unlock| Service_A
+    Service_A -->|Auto-connect at XX:05| SkyWay_A
+    UI_A -->|Tap 'Fine' / 'Unwell' / 'Sync'| Service_A
+    SkyWay_A <-->|XX:05 Sync Window (SkyWay Room)| SkyWay_B
     SkyWay_B --> Service_B
     Service_B -->|Push Notification & Status Update| UI_B
     Service_B -->|24h Inactivity Watchdog| UI_B
@@ -148,11 +153,6 @@ graph LR
    ./gradlew assembleDebug
    ```
 
-3. Install on connected Android devices:
-   ```bash
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
-   ```
-
 ---
 
 ## 📖 How to Use
@@ -161,18 +161,20 @@ graph LR
 2. Open **Settings (⚙️)**:
    - Ensure **SkyWay Connection** is enabled.
    - Enter your **SkyWay App ID** and **Secret Key**.
-   - Set the same **Room Name** (e.g. `tanaka-family-room`) on both devices.
-3. Turn off and turn on the screen on Device A: Device B will automatically discover Device A and update the last-seen status and time over the Internet!
-4. Tap **"😄 元気です"** or **"😣 良くない"** to send instant push notifications.
+   - Set the same **Room Name** (e.g. `tanaka-family-room`) on all devices.
+3. Tap **"Sync Now"** or **"😄 元気です"** on Device A: Device B will automatically discover Device A and display the status!
+4. In daily use, simply unlocking the phone will record activity, and status updates are sent automatically at **XX:05** every hour.
+5. Set the timeout to **"1 minute"** in Settings (⚙️) to test the **"⚠️ Inactivity Alarm Notification"** after 1 minute of inactivity.
 
 ---
 
 ## 🗺 Development Status
 
 - [x] **Persistent Watching Core System**
-  - Screen-ON detection via BroadcastReceiver & Foreground Service
+  - Explicit Screen Unlock detection (`ACTION_USER_PRESENT` - False alarm prevention)
+  - Hourly XX:05 sync scheduling (~7-8MB/month ultra-low data)
   - 24-hour inactivity watchdog & alarm notification alert
-  - Senior-friendly large quick status buttons
+  - Senior-friendly large quick status buttons & manual sync
   - Android 6.0 (API 23) to Android 15+ full compatibility
 - [x] **Internet P2P Communication (SkyWay WebRTC)**
   - SkyWay SDK v2.9.0 integration (P2PRoom & DataStream)

@@ -17,8 +17,29 @@ object WatcherStateHolder {
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
     val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private val _nextSyncTimestamp = MutableStateFlow(0L)
+    val nextSyncTimestamp: StateFlow<Long> = _nextSyncTimestamp.asStateFlow()
+
+    private val _lastSyncTimestamp = MutableStateFlow(0L)
+    val lastSyncTimestamp: StateFlow<Long> = _lastSyncTimestamp.asStateFlow()
+
     private val _uiEvents = MutableSharedFlow<String>()
     val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
+
+    fun setSyncing(syncing: Boolean) {
+        _isSyncing.value = syncing
+    }
+
+    fun setNextSyncTimestamp(ts: Long) {
+        _nextSyncTimestamp.value = ts
+    }
+
+    fun setLastSyncTimestamp(ts: Long) {
+        _lastSyncTimestamp.value = ts
+    }
 
     fun updatePeers(peers: List<PeerInfo>) {
         _peers.value = peers
@@ -39,5 +60,9 @@ object WatcherStateHolder {
 
     suspend fun emitUiEvent(event: String) {
         _uiEvents.emit(event)
+    }
+
+    fun emitUiEventSync(event: String) {
+        _uiEvents.tryEmit(event)
     }
 }
