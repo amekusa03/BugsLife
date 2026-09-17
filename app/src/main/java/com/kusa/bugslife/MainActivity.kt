@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.kusa.bugslife.data.AppPreferences
+import com.kusa.bugslife.data.WatcherStateHolder
 import com.kusa.bugslife.service.WatcherForegroundService
 import com.kusa.bugslife.ui.MainScreen
 import com.kusa.bugslife.ui.theme.BugsLifeTheme
@@ -30,6 +31,13 @@ class MainActivity : ComponentActivity() {
 
         prefs = AppPreferences(this)
 
+        WatcherStateHolder.updatePeers(prefs.getPeers())
+        WatcherStateHolder.setTodayScreenOnCount(prefs.todayScreenOnCount)
+        WatcherStateHolder.setLastLocalScreenOnTime(prefs.lastLocalScreenOnTime)
+        WatcherStateHolder.setLocalUnlockTimestamps(prefs.getUnlockTimestamps())
+        WatcherStateHolder.setPendingStatus(prefs.pendingStatus)
+        WatcherStateHolder.setLogs(prefs.getCommunicationLogs())
+
         checkAndRequestPermissions()
 
         setContent {
@@ -41,6 +49,14 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // アプリ起動・復帰時に操作アクティビティを記録
+        if (::prefs.isInitialized && prefs.isServiceEnabled) {
+            WatcherForegroundService.recordUserActivity(this, "アプリ起動")
         }
     }
 

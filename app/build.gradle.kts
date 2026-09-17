@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -13,8 +14,8 @@ android {
         applicationId = "com.kusa.bugslife"
         minSdk = 23
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -50,9 +51,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-    // SkyWay SDK (Core & Room)
-    implementation("com.ntt.skyway:core:2.9.0")
-    implementation("com.ntt.skyway:room:2.9.0")
+    // Firebase (Cloud Firestore)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.firestore)
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20231013")

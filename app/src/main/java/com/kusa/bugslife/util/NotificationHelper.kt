@@ -35,13 +35,13 @@ object NotificationHelper {
                 setShowBadge(false)
             }
 
-            // 緊急・24時間無通信アラート用 (高優先度・音・バイブ)
+            // 緊急・24時間無通信/無活動アラート用 (高優先度・音・バイブ)
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERT,
                 "安否警告アラート (重要)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "24時間端末が無反応な場合や緊急時の通知"
+                description = "24時間端末が無反応な場合や活動が確認できない緊急時の通知"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 1000)
                 setShowBadge(true)
@@ -82,13 +82,56 @@ object NotificationHelper {
         return NotificationCompat.Builder(context, CHANNEL_SERVICE)
             .setContentTitle("遠隔安否見守り 稼働中")
             .setContentText(contentText)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification_bug)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
+    /**
+     * 過去24時間活動なし（タイムスタンプ0件）の人的異常アラート（仕様D - 人的異常）
+     */
+    fun showNoActivityAlert(
+        context: Context,
+        peerId: String,
+        peerName: String
+    ) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            (peerId + "_no_activity").hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERT)
+            .setContentTitle("🚨 緊急安否警告: ${peerName}さんの活動が確認できません")
+            .setContentText("${peerName}さんは過去24時間スマートフォンを一度も操作していません。")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "【緊急安否確認】\n${peerName}さんの端末通信は届いていますが、過去24時間画面ロック解除（スマホ操作）が一度も行われていません。\n倒れている等の緊急事態の可能性があります。至急連絡や現地確認を行ってください。"
+                )
+            )
+            .setSmallIcon(R.drawable.ic_notification_bug)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setVibrate(longArrayOf(0, 800, 200, 800, 200, 1500))
+            .build()
+
+        notificationManager.notify(NOTIFICATION_ID_ALERT_BASE + (peerId.hashCode() % 500), notification)
+    }
+
+    /**
+     * 一定時間通信自体が途絶えた場合の機器・通信障害アラート
+     */
     fun showInactivityAlert(
         context: Context,
         peerId: String,
@@ -110,15 +153,15 @@ object NotificationHelper {
 
         val hoursFormatted = String.format(java.util.Locale.JAPAN, "%.1f", elapsedHours)
         val notification = NotificationCompat.Builder(context, CHANNEL_ALERT)
-            .setContentTitle("⚠️ 安否警告: ${peerName}さんのスマホが無反応です")
-            .setContentText("${peerName}さんのスマホが約${hoursFormatted}時間操作されていません。")
+            .setContentTitle("⚠️ 通信途絶警告: ${peerName}さんの端末が無反応です")
+            .setContentText("${peerName}さんの端末から約${hoursFormatted}時間定期通信が届いていません。")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
-                    "【安否確認のお願い】\n${peerName}さんのスマートフォンが ${hoursFormatted}時間 以上動いていません（画面点灯が検知されていません）。\n至急、電話等で安否を確認してください。"
+                    "【端末通信未達】\n${peerName}さんのスマートフォンから ${hoursFormatted}時間 以上定期通信が途絶えています。\n端末の電源切れ、故障、圏外、またはアプリ停止の可能性があります。"
                 )
             )
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setSmallIcon(R.drawable.ic_notification_bug)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
@@ -147,9 +190,9 @@ object NotificationHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val title = if (isFine) "😄 ${senderName}さん: 元気です！" else "😣 ${senderName}さん: 体調が良くない"
+        val title = if (isFine) "😄 ${senderName}さん: 元気です！" else "😣 ${senderName}さん: 良くない"
         val body = if (message.isNullOrBlank()) {
-            if (isFine) "${senderName}さんから「元気」の連絡が届きました。" else "${senderName}さんが「体調が良くない」と伝えています。"
+            if (isFine) "${senderName}さんから「元気」の連絡が届きました。" else "${senderName}さんが「良くない」と伝えています。"
         } else {
             message
         }
@@ -158,8 +201,8 @@ object NotificationHelper {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSmallIcon(R.drawable.ic_notification_bug)
+            .setPriority(if (isFine) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()

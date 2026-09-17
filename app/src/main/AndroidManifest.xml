@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
@@ -40,6 +42,10 @@
             android:name=".service.WatcherForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".service.SyncAlarmReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".service.BootReceiver"

@@ -12,10 +12,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CallReceived
-import androidx.compose.material.icons.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +42,7 @@ import java.util.Locale
 @Composable
 fun LogsBottomSheet(
     logs: List<CommunicationLog>,
+    onClearLogs: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.JAPAN) }
@@ -57,13 +59,23 @@ fun LogsBottomSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.List, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "通信ログ履歴 (${logs.size}件)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                }
+
+                if (logs.isNotEmpty()) {
+                    IconButton(onClick = onClearLogs) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "ログ全消去",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
@@ -95,7 +107,7 @@ fun LogsBottomSheet(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    if (log.isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade,
+                                    if (log.isIncoming) Icons.AutoMirrored.Filled.CallReceived else Icons.AutoMirrored.Filled.CallMade,
                                     contentDescription = null,
                                     tint = if (log.isIncoming) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)

@@ -14,6 +14,18 @@ object WatcherStateHolder {
     private val _lastSentTimestamp = MutableStateFlow(0L)
     val lastSentTimestamp: StateFlow<Long> = _lastSentTimestamp.asStateFlow()
 
+    private val _lastLocalScreenOnTime = MutableStateFlow(0L)
+    val lastLocalScreenOnTime: StateFlow<Long> = _lastLocalScreenOnTime.asStateFlow()
+
+    private val _todayScreenOnCount = MutableStateFlow(0)
+    val todayScreenOnCount: StateFlow<Int> = _todayScreenOnCount.asStateFlow()
+
+    private val _localUnlockTimestamps = MutableStateFlow<List<Long>>(emptyList())
+    val localUnlockTimestamps: StateFlow<List<Long>> = _localUnlockTimestamps.asStateFlow()
+
+    private val _pendingStatus = MutableStateFlow<PacketType?>(null)
+    val pendingStatus: StateFlow<PacketType?> = _pendingStatus.asStateFlow()
+
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
     val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
 
@@ -26,8 +38,26 @@ object WatcherStateHolder {
     private val _lastSyncTimestamp = MutableStateFlow(0L)
     val lastSyncTimestamp: StateFlow<Long> = _lastSyncTimestamp.asStateFlow()
 
+    private val _pendingRequests = MutableStateFlow<List<PendingJoinRequest>>(emptyList())
+    val pendingRequests: StateFlow<List<PendingJoinRequest>> = _pendingRequests.asStateFlow()
+
+    private val _myMemberStatus = MutableStateFlow<MemberStatus>(MemberStatus.APPROVED)
+    val myMemberStatus: StateFlow<MemberStatus> = _myMemberStatus.asStateFlow()
+
     private val _uiEvents = MutableSharedFlow<String>()
     val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
+
+    fun setPendingRequests(requests: List<PendingJoinRequest>) {
+        _pendingRequests.value = requests
+    }
+
+    fun removePendingRequest(userId: String) {
+        _pendingRequests.value = _pendingRequests.value.filter { it.userId != userId }
+    }
+
+    fun setMyMemberStatus(status: MemberStatus) {
+        _myMemberStatus.value = status
+    }
 
     fun setSyncing(syncing: Boolean) {
         _isSyncing.value = syncing
@@ -45,6 +75,26 @@ object WatcherStateHolder {
         _peers.value = peers
     }
 
+    fun setTodayScreenOnCount(count: Int) {
+        _todayScreenOnCount.value = count
+    }
+
+    fun setLastLocalScreenOnTime(ts: Long) {
+        _lastLocalScreenOnTime.value = ts
+    }
+
+    fun setLocalUnlockTimestamps(timestamps: List<Long>) {
+        _localUnlockTimestamps.value = timestamps
+    }
+
+    fun setPendingStatus(status: PacketType?) {
+        _pendingStatus.value = status
+    }
+
+    fun setLogs(logs: List<CommunicationLog>) {
+        _logs.value = logs
+    }
+
     fun addLog(log: CommunicationLog) {
         val current = _logs.value.toMutableList()
         current.add(0, log)
@@ -52,6 +102,10 @@ object WatcherStateHolder {
             current.removeAt(current.lastIndex)
         }
         _logs.value = current
+    }
+
+    fun clearLogs() {
+        _logs.value = emptyList()
     }
 
     fun setLastSentTimestamp(ts: Long) {

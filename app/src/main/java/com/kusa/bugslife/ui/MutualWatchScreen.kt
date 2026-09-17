@@ -23,7 +23,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SentimentDissatisfied
@@ -54,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kusa.bugslife.data.MemberStatus
 import com.kusa.bugslife.data.PacketType
 import com.kusa.bugslife.data.PeerInfo
 import kotlinx.coroutines.delay
@@ -64,14 +69,16 @@ import java.util.Locale
 @Composable
 fun MutualWatchScreen(
     todayScreenOnCount: Int,
+    lastLocalScreenOnTime: Long,
     lastSentTimestamp: Long,
     lastSyncTimestamp: Long,
     nextSyncTimestamp: Long,
     isSyncing: Boolean,
     peers: List<PeerInfo>,
     timeoutDurationMs: Long,
-    isSkyWayEnabled: Boolean,
-    skywayRoomName: String,
+    isSyncEnabled: Boolean = true,
+    groupName: String = "",
+    myMemberStatus: MemberStatus = MemberStatus.APPROVED,
     onSendStatus: (PacketType) -> Unit,
     onManualSync: () -> Unit,
     onEditPeer: (PeerInfo) -> Unit,
@@ -96,7 +103,74 @@ fun MutualWatchScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ネットワーク接続 & 毎時05分同期ステータスカード
+        // 承認待ち / 拒否バナー
+        if (myMemberStatus == MemberStatus.PENDING) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color(0xFFE65100),
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "グループ「$groupName」の参加承認待ち",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE65100)
+                            )
+                            Text(
+                                text = "既存メンバーの承認が完了すると自動的に見守り通信が開始されます。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF5D4037)
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (myMemberStatus == MemberStatus.REJECTED) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "グループ参加が拒否されました",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFC62828)
+                            )
+                            Text(
+                                text = "設定画面から別のグループ名に変更するか、相手にご確認ください。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF37474F)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ネットワーク接続 & 定期同期ステータスカード
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -120,7 +194,7 @@ fun MutualWatchScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "毎時05分 定期同期モデル",
+                                text = "クラウド定期同期 (Firebase)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -142,14 +216,14 @@ fun MutualWatchScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "同期中 (接続中)",
+                                        text = "同期中...",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
                                     )
                                 } else {
                                     Text(
-                                        text = "スリープ待機 (省電力)",
+                                        text = if (myMemberStatus == MemberStatus.APPROVED) "待機中 (高信頼・省電力)" else "承認待ち",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.primary
@@ -168,7 +242,7 @@ fun MutualWatchScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Room: $skywayRoomName",
+                                text = "グループ: $groupName",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -177,16 +251,16 @@ fun MutualWatchScreen(
                             Text(
                                 text = "次回同期: $nextTimeStr (前回: $lastSyncStr)",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
 
                         OutlinedButton(
                             onClick = onManualSync,
-                            enabled = !isSyncing && isSkyWayEnabled,
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = ButtonDefaults.ContentPadding
+                            enabled = !isSyncing && myMemberStatus == MemberStatus.APPROVED,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -197,20 +271,104 @@ fun MutualWatchScreen(
             }
         }
 
-        // 自端末のステータスカード (親切な説明付き)
+        // 自身の安否ステータス送信（クイックボタン）
+        item {
+            Text(
+                text = "自分のステータスを相手に伝える",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 元気ですボタン
+                ElevatedButton(
+                    onClick = { onSendStatus(PacketType.STATUS_FINE) },
+                    enabled = myMemberStatus == MemberStatus.APPROVED,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(72.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.elevatedButtonColors(
+                        containerColor = Color(0xFF2E7D32),
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SentimentVerySatisfied, contentDescription = null, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "元気です",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                        Text(
+                            text = "即座にFirebase更新",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+
+                // 良くないボタン
+                ElevatedButton(
+                    onClick = { onSendStatus(PacketType.STATUS_UNWELL) },
+                    enabled = myMemberStatus == MemberStatus.APPROVED,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(72.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.elevatedButtonColors(
+                        containerColor = Color(0xFFE65100),
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SentimentDissatisfied, contentDescription = null, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "良くない",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                        Text(
+                            text = "即座にFirebase更新",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 自分の端末の活動状況
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
@@ -221,109 +379,54 @@ fun MutualWatchScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "あなたの端末 (見守られ & 見守り中)",
+                                text = "自分のスマートフォン",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+
+                        // 手動点灯テストボタン
+                        OutlinedButton(
+                            onClick = onTestScreenOn,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("解除テスト", fontSize = 11.sp)
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("本日のスマホ操作回数", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                            Text("本日の操作回数", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
                             Text(
-                                text = "${todayScreenOnCount} 回",
-                                style = MaterialTheme.typography.headlineMedium,
+                                text = "${todayScreenOnCount}回",
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
+
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("最終送信時刻", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                            Text("最終画面操作", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
                             Text(
-                                text = if (lastSentTimestamp > 0L) fullTimeFormat.format(Date(lastSentTimestamp)) else "次回05分に送信",
+                                text = if (lastLocalScreenOnTime > 0L) timeFormat.format(Date(lastLocalScreenOnTime)) else "記録なし",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "※ スマホを操作（画面ロック解除）すると回数が記録され、毎時05分にまとめて相手へ安全に送信されます。（※電話着信や通知だけで誤カウントされる心配はありません）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
 
-        // ワンタップ安否送信ボタン
-        item {
-            Text(
-                text = "ワンタップ安否報告",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 元気ですボタン
-                ElevatedButton(
-                    onClick = { onSendStatus(PacketType.STATUS_FINE) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(72.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.elevatedButtonColors(
-                        containerColor = Color(0xFF2E7D32),
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 3.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "😄", fontSize = 22.sp)
-                        Text(
-                            text = "元気です！",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                // 良くないボタン
-                ElevatedButton(
-                    onClick = { onSendStatus(PacketType.STATUS_UNWELL) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(72.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.elevatedButtonColors(
-                        containerColor = Color(0xFFC62828),
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 3.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "😣", fontSize = 22.sp)
-                        Text(
-                            text = "良くない",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 相互見守り相手リスト
+        // 見守り相手の一覧
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -331,7 +434,7 @@ fun MutualWatchScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "見守り相手の状況 (${peers.size}台)",
+                    text = "見守り相手の状況 (${peers.size}人)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -342,169 +445,257 @@ fun MutualWatchScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.HourglassEmpty,
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "見守り相手の登録待機中",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "同一Room名（見守りグループ名）を設定した相手端末と毎時05分に同期すると、自動的に一覧に登録されます。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.HourglassEmpty,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "相手端末からの通信を待機しています...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "（相手が同じグループ名「$groupName」を設定すると表示されます）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
             }
         } else {
             items(peers, key = { it.id }) { peer ->
-                val hasReceived = peer.lastSeenTimestamp > 0L
-                val elapsedMs = if (hasReceived) currentTime - peer.lastSeenTimestamp else Long.MAX_VALUE
-                val isTimedOut = hasReceived && elapsedMs >= timeoutDurationMs
+                PeerSafetyCard(
+                    peer = peer,
+                    timeoutDurationMs = timeoutDurationMs,
+                    currentTime = currentTime,
+                    onEditPeer = onEditPeer,
+                    onPingPeer = onPingPeer
+                )
+            }
+        }
+    }
+}
 
-                val (statusColor, statusBgColor, statusIcon, statusTitle) = when {
-                    !hasReceived -> Quadruple(
-                        Color.Gray,
-                        Color(0xFFEEEEEE),
-                        Icons.Default.HourglassEmpty,
-                        "信号待機中"
+@Composable
+fun PeerSafetyCard(
+    peer: PeerInfo,
+    timeoutDurationMs: Long,
+    currentTime: Long,
+    onEditPeer: (PeerInfo) -> Unit,
+    onPingPeer: (PeerInfo) -> Unit
+) {
+    val fullTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.JAPAN) }
+    var expandedTimestamps by remember { mutableStateOf(false) }
+
+    val lastActivity = if (peer.unlockTimestamps.isNotEmpty()) {
+        maxOf(peer.lastSeenTimestamp, peer.lastUnlockTimestamp)
+    } else {
+        peer.lastSeenTimestamp
+    }
+
+    val elapsed = if (lastActivity > 0L) currentTime - lastActivity else 0L
+    val hasReceived = lastActivity > 0L
+    val isConnectionTimedOut = hasReceived && (elapsed >= timeoutDurationMs)
+    val isNoActivity = hasReceived && (peer.unlockTimestamps.isEmpty() || isConnectionTimedOut)
+
+    val (statusColor, statusBgColor, statusIcon, statusTitle) = when {
+        !hasReceived -> Quadruple(
+            MaterialTheme.colorScheme.outline,
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            Icons.Default.HourglassEmpty,
+            "待機中 (未受信)"
+        )
+        isConnectionTimedOut -> Quadruple(
+            Color(0xFFD32F2F),
+            Color(0xFFFFEBEE),
+            Icons.Default.Warning,
+            "🚨 通信途絶 (${formatElapsedTime(elapsed)})"
+        )
+        isNoActivity -> Quadruple(
+            Color(0xFFD32F2F),
+            Color(0xFFFFEBEE),
+            Icons.Default.Warning,
+            "🚨 過去24時間 操作なし"
+        )
+        peer.lastStatus == PacketType.STATUS_UNWELL -> Quadruple(
+            Color(0xFFE65100),
+            Color(0xFFFFF3E0),
+            Icons.Default.SentimentDissatisfied,
+            "😣 良くない"
+        )
+        peer.lastStatus == PacketType.STATUS_FINE -> Quadruple(
+            Color(0xFF2E7D32),
+            Color(0xFFE8F5E9),
+            Icons.Default.SentimentVerySatisfied,
+            "😄 元気です"
+        )
+        else -> Quadruple(
+            Color(0xFF2E7D32),
+            Color(0xFFE8F5E9),
+            Icons.Default.CheckCircle,
+            "🟢 正常 (${peer.unlockCount24h}件 操作確認)"
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = statusBgColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isNoActivity || isConnectionTimedOut) 6.dp else 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        statusIcon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(28.dp)
                     )
-                    isTimedOut -> Quadruple(
-                        Color(0xFFD32F2F),
-                        Color(0xFFFFEBEE),
-                        Icons.Default.Warning,
-                        "⚠️ 24時間無反応 (安否確認要)"
-                    )
-                    peer.lastStatus == PacketType.STATUS_UNWELL -> Quadruple(
-                        Color(0xFFE65100),
-                        Color(0xFFFFF3E0),
-                        Icons.Default.SentimentDissatisfied,
-                        "😣 体調が良くない"
-                    )
-                    peer.lastStatus == PacketType.STATUS_FINE -> Quadruple(
-                        Color(0xFF2E7D32),
-                        Color(0xFFE8F5E9),
-                        Icons.Default.SentimentVerySatisfied,
-                        "😄 元気です"
-                    )
-                    else -> Quadruple(
-                        Color(0xFF2E7D32),
-                        Color(0xFFE8F5E9),
-                        Icons.Default.CheckCircle,
-                        "🟢 正常 (操作確認あり)"
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = peer.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = statusBgColor),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isTimedOut) 6.dp else 2.dp)
+                Row {
+                    IconButton(onClick = { onPingPeer(peer) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "テスト通信", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onEditPeer(peer) }) {
+                        Icon(Icons.Default.Edit, contentDescription = "編集")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // ステータスバッジ
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = statusColor.copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    statusIcon,
-                                    contentDescription = null,
-                                    tint = statusColor,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = peer.name,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                    Text(
+                        text = statusTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor,
+                        fontSize = 14.sp
+                    )
+                }
+            }
 
-                            Row {
-                                IconButton(onClick = { onPingPeer(peer) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "テスト通信", tint = MaterialTheme.colorScheme.primary)
-                                }
-                                IconButton(onClick = { onEditPeer(peer) }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "編集")
-                                }
-                            }
-                        }
+            Spacer(modifier = Modifier.height(10.dp))
 
-                        Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("24時間のスマホ操作", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                    Text(
+                        text = if (!hasReceived) "未受信" else if (isNoActivity) "0件 (無活動)" else "${peer.unlockCount24h}件",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isNoActivity) Color(0xFFD32F2F) else Color.Black
+                    )
+                }
 
-                        // ステータスバッジ
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = statusColor.copy(alpha = 0.15f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = statusTitle,
-                                    fontWeight = FontWeight.Bold,
-                                    color = statusColor,
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("最終同期・受信日時", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                    Text(
+                        text = if (hasReceived) fullTimeFormat.format(Date(peer.lastSeenTimestamp)) else "-",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+            if (peer.lastMessage.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "詳細: ${peer.lastMessage}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.DarkGray
+                )
+            }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text("前回の操作検知から", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
-                                Text(
-                                    text = if (hasReceived) formatElapsedTime(elapsedMs) else "未受信",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isTimedOut) Color(0xFFD32F2F) else Color.Black
-                                )
-                            }
+            // タイムスタンプ履歴の開閉
+            if (peer.unlockTimestamps.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { expandedTimestamps = !expandedTimestamps }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.DarkGray)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "直近の操作履歴 (${peer.unlockTimestamps.size}件)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.DarkGray
+                        )
+                    }
+                    Icon(
+                        if (expandedTimestamps) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.DarkGray
+                    )
+                }
 
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("最終受信日時", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
-                                Text(
-                                    text = if (hasReceived) fullTimeFormat.format(Date(peer.lastSeenTimestamp)) else "-",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        if (peer.lastMessage.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "詳細: ${peer.lastMessage}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.DarkGray
-                            )
-                        }
+                AnimatedVisibility(visible = expandedTimestamps) {
+                    val timeFormatShort = remember { SimpleDateFormat("HH:mm", Locale.JAPAN) }
+                    val sortedTimestamps = peer.unlockTimestamps.sortedDescending()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "直近のロック解除:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.DarkGray
+                        )
+                        val previewList = sortedTimestamps.take(10)
+                        val timesStr = previewList.joinToString(", ") { timeFormatShort.format(Date(it)) }
+                        Text(
+                            text = if (sortedTimestamps.size > 10) "$timesStr ... 他${sortedTimestamps.size - 10}件" else timesStr,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.DarkGray
+                        )
                     }
                 }
             }
