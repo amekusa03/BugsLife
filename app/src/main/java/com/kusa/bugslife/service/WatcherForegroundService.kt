@@ -43,7 +43,6 @@ class WatcherForegroundService : Service() {
     private var messenger: FirestorePeerMessenger? = null
 
     private var isSendInProgress = false
-    private val recentPacketIds = mutableSetOf<String>()
 
     companion object {
         const val ACTION_START = "com.kusa.bugslife.action.START"
@@ -51,6 +50,7 @@ class WatcherForegroundService : Service() {
         const val ACTION_SEND_STATUS = "com.kusa.bugslife.action.SEND_STATUS"
         const val ACTION_MANUAL_SYNC = "com.kusa.bugslife.action.MANUAL_SYNC"
         const val ACTION_SCHEDULED_SYNC = "com.kusa.bugslife.action.SCHEDULED_SYNC"
+        const val ACTION_INACTIVITY_TIMEOUT = "com.kusa.bugslife.action.INACTIVITY_TIMEOUT"
         const val ACTION_RECORD_ACTIVITY = "com.kusa.bugslife.action.RECORD_ACTIVITY"
         const val ACTION_RELOAD_SETTINGS = "com.kusa.bugslife.action.RELOAD_SETTINGS"
         const val ACTION_APPROVE_MEMBER = "com.kusa.bugslife.action.APPROVE_MEMBER"
@@ -62,6 +62,7 @@ class WatcherForegroundService : Service() {
         const val EXTRA_TARGET_USER_ID = "extra_target_user_id"
 
         private const val ALARM_REQUEST_CODE = 9001
+        private const val INACTIVITY_ALARM_REQUEST_CODE = 9002
 
         @Volatile
         var instance: WatcherForegroundService? = null
@@ -145,24 +146,31 @@ class WatcherForegroundService : Service() {
         }
 
         fun calculateNextSyncTimestamp(fromMillis: Long = System.currentTimeMillis()): Long {
+            val syncHours = intArrayOf(0, 6, 12, 18)
             val calendar = Calendar.getInstance().apply {
                 timeInMillis = fromMillis
             }
-            val currentMinute = calendar.get(Calendar.MINUTE)
-            val currentSecond = calendar.get(Calendar.SECOND)
-
-            if (currentMinute < 5 || (currentMinute == 5 && currentSecond == 0 && calendar.get(Calendar.MILLISECOND) == 0)) {
-                if (currentMinute == 5 && currentSecond == 0 && calendar.get(Calendar.MILLISECOND) == 0) {
-                    calendar.add(Calendar.HOUR_OF_DAY, 1)
+            for (hour in syncHours) {
+                val slotCal = (calendar.clone() as Calendar).apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, 5)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }
-                calendar.set(Calendar.MINUTE, 5)
-            } else {
-                calendar.add(Calendar.HOUR_OF_DAY, 1)
-                calendar.set(Calendar.MINUTE, 5)
+                if (slotCal.timeInMillis > fromMillis) {
+                    return slotCal.timeInMillis
+                }
             }
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            return calendar.timeInMillis
+
+            // 18:05 を過ぎている場合は翌日 00:05
+            val nextDayCal = (calendar.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 5)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            return nextDayCal.timeInMillis
         }
     }
 
@@ -191,10 +199,11 @@ class WatcherForegroundService : Service() {
         WatcherStateHolder.setLastSyncTimestamp(prefs.lastSyncTimestamp)
         WatcherStateHolder.setMyMemberStatus(prefs.myMemberStatus)
 
-        // 次回定期同期アラームのスケジュール
+        // 次回定期同期アラーム & 無操作タイムアウトアラームのスケジュール
         val nextTime = calculateNextSyncTimestamp()
         WatcherStateHolder.setNextSyncTimestamp(nextTime)
         scheduleNextSyncAlarm(this, nextTime)
+        scheduleInactivityAlarm(this, prefs.lastLocalScreenOnTime)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -225,6 +234,10 @@ class WatcherForegroundService : Service() {
             ACTION_SCHEDULED_SYNC -> {
                 performFirebaseSend(isDirectStatus = false, isManualTrigger = false)
             }
+            ACTION_INACTIVITY_TIMEOUT -> {
+                Log.d(tag, "onStartCommand: ACTION_INACTIVITY_TIMEOUT")
+                performFirebaseSend(isDirectStatus = false, isManualTrigger = false, isInactivityTrigger = true)
+            }
             ACTION_APPROVE_MEMBER -> {
                 val targetId = intent?.getStringExtra(EXTRA_TARGET_USER_ID) ?: ""
                 handleApproveMember(targetId)
@@ -236,6 +249,7 @@ class WatcherForegroundService : Service() {
             ACTION_RELOAD_SETTINGS -> {
                 initMessenger()
                 updateNotification()
+                scheduleInactivityAlarm(this, prefs.lastLocalScreenOnTime)
             }
         }
 
@@ -245,6 +259,11 @@ class WatcherForegroundService : Service() {
     fun triggerScheduledSyncFromReceiver() {
         Log.d(tag, "Scheduled sync triggered directly from receiver.")
         performFirebaseSend(isDirectStatus = false, isManualTrigger = false)
+    }
+
+    fun triggerInactivityTimeoutFromReceiver() {
+        Log.d(tag, "Inactivity timeout sync triggered directly from receiver.")
+        performFirebaseSend(isDirectStatus = false, isManualTrigger = false, isInactivityTrigger = true)
     }
 
     private fun initMessenger() {
@@ -318,16 +337,19 @@ class WatcherForegroundService : Service() {
         WatcherStateHolder.setTodayScreenOnCount(prefs.todayScreenOnCount)
         WatcherStateHolder.setLastLocalScreenOnTime(now)
 
+        // スマホ操作があったため無操作アラームタイマーをリセット (now + timeoutDurationMillis)
+        scheduleInactivityAlarm(this, now)
+
         val lastSend = prefs.lastSuccessfulSendTimestamp
         val elapsed = now - lastSend
 
         Log.d(tag, "Screen unlock recorded ($reason). Pending count: ${prefs.getPendingUnlockTimestamps().size}, Elapsed since last send: ${elapsed / 60000}m")
 
-        if (lastSend == 0L || elapsed >= AppPreferences.ONE_HOUR_MS) {
-            Log.d(tag, "1 hour elapsed since last send. Sending to Firebase...")
+        if (lastSend == 0L || elapsed >= AppPreferences.SIX_HOURS_MS) {
+            Log.d(tag, "6 hours elapsed since last send. Sending to Firebase...")
             performFirebaseSend(isDirectStatus = false)
         } else {
-            val remainMinutes = ((AppPreferences.ONE_HOUR_MS - elapsed) / 60000L).coerceAtLeast(1L)
+            val remainMinutes = ((AppPreferences.SIX_HOURS_MS - elapsed) / 60000L).coerceAtLeast(1L)
             serviceScope.launch {
                 WatcherStateHolder.emitUiEvent("📱 $reason を記録 (次回自動送信まで約${remainMinutes}分)")
             }
@@ -350,7 +372,7 @@ class WatcherForegroundService : Service() {
     /**
      * Firebaseへの送信処理
      */
-    private fun performFirebaseSend(isDirectStatus: Boolean, isManualTrigger: Boolean = false) {
+    private fun performFirebaseSend(isDirectStatus: Boolean, isManualTrigger: Boolean = false, isInactivityTrigger: Boolean = false) {
         if (isSendInProgress) {
             Log.d(tag, "Send already in progress, skipping.")
             return
@@ -383,8 +405,8 @@ class WatcherForegroundService : Service() {
             }
 
             val pendingTimestamps = prefs.getPendingUnlockTimestamps()
-            val status = prefs.pendingStatus
-            val message = prefs.pendingStatusMessage
+            val status = if (isDirectStatus) prefs.pendingStatus else null
+            val message = if (isDirectStatus) prefs.pendingStatusMessage else ""
 
             val packet = SafetyPacket(
                 senderId = prefs.userId,
@@ -422,18 +444,27 @@ class WatcherForegroundService : Service() {
                     WatcherStateHolder.setPendingStatus(null)
                 }
 
-                val detailStr = if (isDirectStatus) {
-                    "ステータス即座送信: ${status?.label}"
-                } else if (isManualTrigger) {
-                    "手動同期: タイムスタンプ${pendingTimestamps.size}件送信"
-                } else {
-                    "定期/解除送信: タイムスタンプ${pendingTimestamps.size}件送信"
+                val (logTitle, detailStr) = when {
+                    isDirectStatus -> {
+                        when (status) {
+                            PacketType.STATUS_FINE -> "ステータス送信 (元気です)" to "「😄 元気です」を送信${if (message.isNotBlank()) " ($message)" else ""}"
+                            PacketType.STATUS_UNWELL -> "ステータス送信 (良くない)" to "「😣 良くない」を送信${if (message.isNotBlank()) " ($message)" else ""}"
+                            PacketType.PING -> "疎通確認テスト" to "疎通確認テスト (PING) を送信"
+                            else -> "ステータス送信" to "ステータス「${status?.label ?: "送信"}」を送信${if (message.isNotBlank()) " ($message)" else ""}"
+                        }
+                    }
+                    isInactivityTrigger -> {
+                        val hours = prefs.timeoutDurationMillis / (1000 * 60 * 60)
+                        "🚨 無操作タイムアウト到達" to "最後の操作から${hours}時間無操作のため自動送信 (新着操作 ${pendingTimestamps.size}件)"
+                    }
+                    isManualTrigger -> "手動同期" to "手動同期を実行 (新着操作 ${pendingTimestamps.size}件を送信)"
+                    else -> "定期同期 (6時間)" to "定期同期を送信 (新着操作 ${pendingTimestamps.size}件を送信)"
                 }
 
                 appendLog(
                     CommunicationLog(
                         isIncoming = false,
-                        peerName = prefs.groupName,
+                        peerName = "自分 ($logTitle)",
                         packetType = status ?: packet.type,
                         detail = detailStr
                     )
@@ -445,6 +476,14 @@ class WatcherForegroundService : Service() {
                 // ついでにグループ内の他メンバーの最新状態も取得
                 fetchPeersAndCheckInactivity(currentMessenger)
             } else {
+                appendLog(
+                    CommunicationLog(
+                        isIncoming = false,
+                        peerName = "自分 (送信失敗)",
+                        packetType = status ?: packet.type,
+                        detail = "⚠️ Firebaseへの送信に失敗しました (内部に保持して次回再試行)"
+                    )
+                )
                 WatcherStateHolder.emitUiEvent("⚠️ Firebase送信失敗 (内部ファイルに保持して次回再試行)")
                 Log.w(tag, "Firebase send failed. Timestamps remain in pending buffer.")
             }
@@ -480,20 +519,15 @@ class WatcherForegroundService : Service() {
                 return@launch
             }
 
-            // 重複判定
-            val isNewPacket = synchronized(recentPacketIds) {
-                if (recentPacketIds.contains(packet.packetId)) {
-                    false
-                } else {
-                    recentPacketIds.add(packet.packetId)
-                    if (recentPacketIds.size > 100) {
-                        recentPacketIds.remove(recentPacketIds.iterator().next())
-                    }
-                    true
-                }
-            }
+            // 重複通知判定
+            // recentPacketIds はメモリ上のみで再起動後にリセットされるため、
+            // 「前回通知済みのタイムスタンプより新しいか」で永続的に判定する。
+            // これにより再起動・Doze復帰後の重複通知を防止する。
+            val lastNotified = prefs.getLastNotifiedTimestamp(packet.senderId)
+            val isNewPacket = packet.timestamp > lastNotified
 
-            val effectiveStatus = packet.status ?: if (packet.type == PacketType.STATUS_FINE || packet.type == PacketType.STATUS_UNWELL) packet.type else null
+            val isDirectStatusPacket = packet.type == PacketType.STATUS_FINE || packet.type == PacketType.STATUS_UNWELL
+            val effectiveStatus = if (isDirectStatusPacket) packet.type else packet.status
 
             prefs.updatePeerStatus(
                 senderId = packet.senderId,
@@ -508,58 +542,74 @@ class WatcherForegroundService : Service() {
 
             val updatedPeers = prefs.getPeers()
             WatcherStateHolder.updatePeers(updatedPeers)
+            val peerDisplayName = updatedPeers.firstOrNull { it.id == packet.senderId }?.displayName ?: packet.senderName
 
             val isNoActivity = packet.unlockTimestamps.isEmpty() && packet.type != PacketType.PING && packet.type != PacketType.ACK
 
             if (isNewPacket) {
                 val detailStr = buildString {
-                    if (effectiveStatus != null) {
-                        append(effectiveStatus.label)
-                        append(" / ")
-                    }
-                    if (isNoActivity) {
-                        append("⚠️操作履歴なし")
+                    if (isDirectStatusPacket) {
+                        append(packet.type.label)
+                        if (packet.message.isNotBlank()) {
+                            append(" (${packet.message})")
+                        }
+                        if (packet.unlockTimestamps.isNotEmpty()) {
+                            append(" / 直近24h活動:${packet.unlockTimestamps.size}件")
+                        }
                     } else {
-                        append("操作履歴:${packet.unlockTimestamps.size}件")
-                    }
-                    if (packet.message.isNotBlank()) {
-                        append(" (${packet.message})")
+                        if (isNoActivity) {
+                            append("⚠️操作履歴なし (定期同期)")
+                        } else {
+                            append("定期同期 (直近24h活動: ${packet.unlockTimestamps.size}件)")
+                        }
+                        if (packet.message.isNotBlank()) {
+                            append(" (${packet.message})")
+                        }
                     }
                 }
 
                 appendLog(
                     CommunicationLog(
                         isIncoming = true,
-                        peerName = packet.senderName,
-                        packetType = effectiveStatus ?: packet.type,
+                        peerName = peerDisplayName,
+                        packetType = if (isDirectStatusPacket) packet.type else PacketType.HEARTBEAT,
                         detail = detailStr
                     )
                 )
 
-                // ステータス通知
-                when (effectiveStatus) {
-                    PacketType.STATUS_FINE -> {
-                        NotificationHelper.showStatusNotification(
-                            this@WatcherForegroundService,
-                            packet.senderName,
-                            isFine = true,
-                            message = packet.message
-                        )
+                // ステータス通知は、明示的なステータス送信パケット(STATUS_FINE / STATUS_UNWELL)を受信した時のみ発火
+                if (isDirectStatusPacket) {
+                    when (packet.type) {
+                        PacketType.STATUS_FINE -> {
+                            NotificationHelper.showStatusNotification(
+                                this@WatcherForegroundService,
+                                peerDisplayName,
+                                isFine = true,
+                                message = packet.message
+                            )
+                        }
+                        PacketType.STATUS_UNWELL -> {
+                            NotificationHelper.showStatusNotification(
+                                this@WatcherForegroundService,
+                                peerDisplayName,
+                                isFine = false,
+                                message = packet.message
+                            )
+                        }
+                        else -> {}
                     }
-                    PacketType.STATUS_UNWELL -> {
-                        NotificationHelper.showStatusNotification(
-                            this@WatcherForegroundService,
-                            packet.senderName,
-                            isFine = false,
-                            message = packet.message
-                        )
-                    }
-                    else -> {}
                 }
+
+                // 通知済みタイムスタンプを永続化して、再起動後の重複通知を防止
+                prefs.setLastNotifiedTimestamp(packet.senderId, packet.timestamp)
             }
 
-            val statusMsg = effectiveStatus?.label ?: if (isNoActivity) "⚠️活動なし" else "活動${packet.unlockTimestamps.size}件"
-            WatcherStateHolder.emitUiEvent("受信: ${packet.senderName}さん「$statusMsg」")
+            val statusMsg = if (isDirectStatusPacket) {
+                "「${packet.type.label}」"
+            } else {
+                if (isNoActivity) "(⚠️活動なし)" else "(直近24h活動: ${packet.unlockTimestamps.size}件)"
+            }
+            WatcherStateHolder.emitUiEvent("受信: ${peerDisplayName}さん $statusMsg")
         }
     }
 
@@ -602,11 +652,11 @@ class WatcherForegroundService : Service() {
                 val elapsed = now - lastActivityTime
                 if (elapsed >= timeoutMs && !peer.isAlertTriggered) {
                     val elapsedHours = elapsed.toDouble() / (1000 * 60 * 60)
-                    Log.w(tag, "🚨 24h Inactivity Alert: No activity from ${peer.name} for ${elapsedHours}h")
+                    Log.w(tag, "🚨 24h Inactivity Alert: No activity from ${peer.displayName} for ${elapsedHours}h")
                     NotificationHelper.showNoActivityAlert(
                         this@WatcherForegroundService,
                         peer.id,
-                        peer.name
+                        peer.displayName
                     )
                     allPeers[i] = peer.copy(isAlertTriggered = true)
                     hasChanges = true
@@ -712,6 +762,64 @@ class WatcherForegroundService : Service() {
         }
     }
 
+    private fun scheduleInactivityAlarm(context: Context, lastActivityTime: Long = prefs.lastLocalScreenOnTime) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val baseTime = if (lastActivityTime > 0L) lastActivityTime else System.currentTimeMillis()
+        val triggerAtMillis = baseTime + prefs.timeoutDurationMillis
+
+        val intent = Intent(context, SyncAlarmReceiver::class.java).apply {
+            action = ACTION_INACTIVITY_TIMEOUT
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            INACTIVITY_ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            }
+            val remainHours = ((triggerAtMillis - System.currentTimeMillis()) / (1000 * 60 * 60)).coerceAtLeast(0)
+            Log.d(tag, "Inactivity alarm scheduled at: ${formatTime(triggerAtMillis)} (in ~$remainHours hrs)")
+        } catch (e: SecurityException) {
+            Log.w(tag, "Exact alarm permission not granted for inactivity alarm, falling back to setWindow")
+            alarmManager.setWindow(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                15 * 60 * 1000L,
+                pendingIntent
+            )
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to schedule inactivity alarm: ${e.message}", e)
+        }
+    }
+
+    private fun cancelInactivityAlarm(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val intent = Intent(context, SyncAlarmReceiver::class.java).apply {
+            action = ACTION_INACTIVITY_TIMEOUT
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            INACTIVITY_ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
     private fun cancelSyncAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(context, SyncAlarmReceiver::class.java)
@@ -746,6 +854,7 @@ class WatcherForegroundService : Service() {
     private fun stopForegroundService() {
         unregisterScreenReceiver()
         cancelSyncAlarm(this)
+        cancelInactivityAlarm(this)
         watchdogJob?.cancel()
         watchdogJob = null
         messenger?.stopListening()

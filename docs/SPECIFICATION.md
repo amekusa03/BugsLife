@@ -12,7 +12,7 @@ BugsLife は、クライアント（Android 端末）とバックエンド（Fir
 graph TD
     subgraph ClientA ["見守られ側端末 (端末A)"]
         A1[ScreenEventReceiver<br/>画面点灯/ロック解除検知] -->|ローカル記録| A2[AppPreferences<br/>未送信タイムスタンプ蓄積]
-        A3[SyncAlarmReceiver<br/>毎時05分 アラーム起床] -->|送信トリガー| A4[WatcherForegroundService<br/>常駐バックグラウンドサービス]
+        A3[SyncAlarmReceiver<br/>6時間ごと(00:05/06:05/12:05/18:05) アラーム起床] -->|送信トリガー| A4[WatcherForegroundService<br/>常駐バックグラウンドサービス]
         A2 -->|差分ロード| A4
         A5[BootReceiver<br/>端末再起動検知] -->|自動再起動| A4
     end
@@ -24,11 +24,11 @@ graph TD
     subgraph ClientB ["見守り側端末 (端末B)"]
         B1[WatcherForegroundService<br/>リアルタイムリスナー & 定期同期]
         B2[異常検知エンジン<br/>24h無活動 / 通信途絶判定]
-        B3[アラート通知 & 大音量警報]
+        B3[アラート通知 & バイブレーション]
         B1 --> B2 --> B3
     end
 
-    A4 -->|"差分アップロード<br/>(1時間以上の間隔で送信)"| FS
+    A4 -->|"差分アップロード<br/>(6時間以上の間隔で送信)"| FS
     FS -->|"SnapshotListener / Get"| B1
 ```
 
@@ -41,14 +41,14 @@ graph TD
 | コンポーネント | 種別 | 責務・動作概要 |
 | :--- | :--- | :--- |
 | **`WatcherForegroundService`** | Foreground Service | 常駐型バックグラウンドサービス。Firestore のリアルタイム監視、データ同期、定期的な安否チェック、異常検知アラートの発動を統括。 |
-| **`SyncAlarmReceiver`** | BroadcastReceiver | `AlarmManager.setExactAndAllowWhileIdle` により、端末の Doze モード（ディープスリープ）を解除して毎時05分に起床し、同期と監視を実行。 |
+| **`SyncAlarmReceiver`** | BroadcastReceiver | `AlarmManager.setExactAndAllowWhileIdle` により、6時間ごと（00:05, 06:05, 12:05, 18:05）の定時起床に加え、**設定された無操作タイムアウト時間（例: 24時間）経過の瞬間に即時起床**してFirebaseへ同期・異常状態を送信。 |
 | **`ScreenEventReceiver`** | Dynamic Receiver | `ACTION_USER_PRESENT`（ロック解除）および `ACTION_SCREEN_ON`（画面点灯）を動的検知。3秒のデバウンス処理を実施。 |
 | **`BootReceiver`** | Static Receiver | `ACTION_BOOT_COMPLETED` および `ACTION_MY_PACKAGE_REPLACED` を受信。ユーザーがアプリを開かなくてもサービスを自動起動。 |
 | **`AppPreferences`** | Local Storage | 設定値、相手ステータス、過去の通信ログ（48時間）、送信待ちタイムスタンプを管理。 |
 
 ### 2.2 省電力・軽量化（検量性）設計
 1. **通信間隔の最小化**:
-   - 画面ロック解除時であっても、前回の Firebase 正常送信から **1時間以上** 経過していなければ通信を行わず、ローカルバッファにタイムスタンプを溜める。
+   - 画面ロック解除時であっても、前回の Firebase 正常送信から **6時間以上** 経過していなければ通信を行わず、ローカルバッファにタイムスタンプを溜める。
 2. **タイムスタンプの重複間引き**:
    - 1分以内の連続したロック解除・画面点灯操作は、最新時刻に自動マージして配列の肥大化を防止。
 3. **通信ログのローテーション**:
@@ -117,11 +117,11 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    Start[定期チェック実行 (毎時05分 / 受信時)] --> Q1{相手の memberStatus が<br/>APPROVED か？}
+    Start[定期チェック実行 (6時間ごと / 受信時)] --> Q1{相手の memberStatus が<br/>APPROVED か？}
     Q1 -- No --> End[監視スキップ]
     Q1 -- Yes --> Q2{相手の unlockTimestamps が<br/>24時間以内に 0件 か？}
     
-    Q2 -- Yes (0件) --> AlertHuman[🚨 人的異常アラート発動<br/>・24時間スマホ操作なし<br/>・大音量アラーム & バイブレーション<br/>・通知バーに緊急警告]
+    Q2 -- Yes (0件) --> AlertHuman[🚨 人的異常アラート発動<br/>・24時間スマホ操作なし<br/>・通知音 & バイブレーション<br/>・通知バーに緊急警告]
     Q2 -- No (1件以上あり) --> Q3{最終通信から<br/>制限時間(24h等)以上<br/>経過しているか？}
     
     Q3 -- Yes --> AlertDevice[⚠️ 通信途絶アラート発動<br/>・端末故障 / バッテリー切れ / 圏外<br/>・通知バーに警告]
@@ -129,7 +129,8 @@ flowchart TD
 ```
 
 ### 5.1 アラートの挙動
-- **大音量アラーム**: マナーモードや消音設定をオーバーライドしてループ再生。
+
+- **通知音・バイブレーション**: 通常の通知音およびバイブレーションで通知。
 - **通知バー**: 緊急警告通知をピン留め表示。
 - **UI表示**: 該当ユーザーのカードを赤枠・緊急警告バナーで強調表示。
 - **復帰**: 相手がスマホを操作（ロック解除）または「元気です」を送信すると自動的に通常状態へ復旧。

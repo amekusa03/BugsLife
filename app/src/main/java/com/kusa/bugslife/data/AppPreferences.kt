@@ -12,6 +12,7 @@ class AppPreferences(context: Context) {
 
     companion object {
         const val ONE_HOUR_MS = 60 * 60 * 1000L
+        const val SIX_HOURS_MS = 6 * 60 * 60 * 1000L
         const val TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000L
         const val LOG_RETENTION_MS = 48 * 60 * 60 * 1000L // 48時間保持
         const val MAX_COMMUNICATION_LOGS = 100 // 最大100件
@@ -169,9 +170,11 @@ class AppPreferences(context: Context) {
                         timestampsList.add(timestampsArray.getLong(j))
                     }
                 }
+                val customName = if (obj.has("customName") && !obj.isNull("customName")) obj.optString("customName").takeIf { it.isNotBlank() } else null
                 val peer = PeerInfo(
                     id = obj.getString("id"),
                     name = obj.getString("name"),
+                    customName = customName,
                     lastSeenTimestamp = obj.optLong("lastSeenTimestamp", 0L),
                     lastStatus = if (obj.has("lastStatus")) PacketType.fromString(obj.optString("lastStatus")) else null,
                     memberStatus = MemberStatus.fromString(obj.optString("memberStatus", "APPROVED")),
@@ -193,6 +196,9 @@ class AppPreferences(context: Context) {
             val obj = JSONObject()
             obj.put("id", peer.id)
             obj.put("name", peer.name)
+            if (!peer.customName.isNullOrBlank()) {
+                obj.put("customName", peer.customName)
+            }
             obj.put("lastSeenTimestamp", peer.lastSeenTimestamp)
             if (peer.lastStatus != null) {
                 obj.put("lastStatus", peer.lastStatus.name)
@@ -231,13 +237,14 @@ class AppPreferences(context: Context) {
                 memberStatus = memberStatus,
                 lastMessage = message,
                 isAlertTriggered = isAlert,
-                unlockTimestamps = if (unlockTimestamps.isNotEmpty()) unlockTimestamps else current.unlockTimestamps
+                unlockTimestamps = unlockTimestamps
             )
         } else {
             peers.add(
                 PeerInfo(
                     id = senderId,
                     name = if (senderName.isNotBlank()) senderName else "相手",
+                    customName = null,
                     lastSeenTimestamp = timestamp,
                     lastStatus = status,
                     memberStatus = memberStatus,
@@ -290,5 +297,26 @@ class AppPreferences(context: Context) {
 
     fun clearCommunicationLogs() {
         prefs.edit().remove("communication_logs").apply()
+    }
+
+    // ---------------------------------------------------------------
+    // ピアごとの「最終通知済みタイムスタンプ」管理
+    // 再起動後も重複通知を防ぐための永続化キャッシュ
+    // ---------------------------------------------------------------
+
+    /**
+     * 指定ピアに対して最後に通知（ステータス通知・ログ追記）したパケットの
+     * タイムスタンプを返す。初回または未記録の場合は 0L を返す。
+     */
+    fun getLastNotifiedTimestamp(peerId: String): Long {
+        return prefs.getLong("last_notified_ts_$peerId", 0L)
+    }
+
+    /**
+     * 指定ピアの最終通知済みタイムスタンプを更新する。
+     * handleIncomingPacket で通知処理を行った直後に呼ぶ。
+     */
+    fun setLastNotifiedTimestamp(peerId: String, timestamp: Long) {
+        prefs.edit().putLong("last_notified_ts_$peerId", timestamp).apply()
     }
 }

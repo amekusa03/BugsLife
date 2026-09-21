@@ -7,7 +7,7 @@ import android.os.PowerManager
 import android.util.Log
 
 /**
- * 毎時05分の定期同期用 AlarmManager レシーバー
+ * 6時間定期同期 & 無操作タイムアウト用の AlarmManager レシーバー
  * スリープ中（Dozeモード）の端末を叩き起こして WatcherForegroundService に同期を実行させます。
  */
 class SyncAlarmReceiver : BroadcastReceiver() {
@@ -15,7 +15,8 @@ class SyncAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
-        Log.d(tag, "Sync alarm fired! Waking up for hourly sync window.")
+        val action = intent?.action ?: WatcherForegroundService.ACTION_SCHEDULED_SYNC
+        Log.d(tag, "Sync alarm fired! Action: $action")
 
         val pendingResult = goAsync()
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -30,21 +31,24 @@ class SyncAlarmReceiver : BroadcastReceiver() {
         }
 
         try {
-            // サービスが既にメモリ上に常駐している場合は直接同期を実行
             val runningService = WatcherForegroundService.instance
             if (runningService != null) {
-                Log.d(tag, "Directly triggering scheduled sync on existing service instance.")
-                runningService.triggerScheduledSyncFromReceiver()
+                if (action == WatcherForegroundService.ACTION_INACTIVITY_TIMEOUT) {
+                    Log.d(tag, "Directly triggering inactivity timeout sync on existing service.")
+                    runningService.triggerInactivityTimeoutFromReceiver()
+                } else {
+                    Log.d(tag, "Directly triggering scheduled sync on existing service instance.")
+                    runningService.triggerScheduledSyncFromReceiver()
+                }
             } else {
-                // サービスが停止している場合はフォアグラウンドサービスとして起動
-                Log.d(tag, "Service instance not found. Starting WatcherForegroundService.")
+                Log.d(tag, "Service instance not found. Starting WatcherForegroundService with action: $action")
                 val serviceIntent = Intent(context, WatcherForegroundService::class.java).apply {
-                    action = WatcherForegroundService.ACTION_SCHEDULED_SYNC
+                    this.action = action
                 }
                 WatcherForegroundService.startServiceCompat(context, serviceIntent)
             }
         } catch (e: Exception) {
-            Log.e(tag, "Failed to dispatch scheduled sync: ${e.message}", e)
+            Log.e(tag, "Failed to dispatch sync: ${e.message}", e)
         } finally {
             pendingResult.finish()
             try {

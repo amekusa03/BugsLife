@@ -37,7 +37,7 @@ fun PeerEditDialog(
     onSave: (PeerInfo) -> Unit,
     onDelete: (PeerInfo) -> Unit
 ) {
-    var name by remember { mutableStateOf(peer.name) }
+    var name by remember { mutableStateOf(peer.displayName) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -52,7 +52,7 @@ fun PeerEditDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "表示名を変更できます",
+                    text = "この端末での表示名（ニックネーム）を変更できます",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -71,7 +71,7 @@ fun PeerEditDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onSave(peer.copy(name = name.trim()))
+                        onSave(peer.copy(customName = name.trim()))
                     }
                 },
                 enabled = name.isNotBlank()

@@ -58,6 +58,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kusa.bugslife.data.AppPreferences
+import com.kusa.bugslife.data.CommunicationLog
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material3.TextButton
 import com.kusa.bugslife.data.MemberStatus
 import com.kusa.bugslife.data.PacketType
 import com.kusa.bugslife.data.PeerInfo
@@ -223,7 +229,7 @@ fun MutualWatchScreen(
                                     )
                                 } else {
                                     Text(
-                                        text = if (myMemberStatus == MemberStatus.APPROVED) "待機中 (高信頼・省電力)" else "承認待ち",
+                                        text = if (myMemberStatus == MemberStatus.APPROVED) "待機中 (6時間周期・超省電力)" else "承認待ち",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.primary
@@ -499,7 +505,6 @@ fun PeerSafetyCard(
     onPingPeer: (PeerInfo) -> Unit
 ) {
     val fullTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.JAPAN) }
-    var expandedTimestamps by remember { mutableStateOf(false) }
 
     val lastActivity = if (peer.unlockTimestamps.isNotEmpty()) {
         maxOf(peer.lastSeenTimestamp, peer.lastUnlockTimestamp)
@@ -511,6 +516,9 @@ fun PeerSafetyCard(
     val hasReceived = lastActivity > 0L
     val isConnectionTimedOut = hasReceived && (elapsed >= timeoutDurationMs)
     val isNoActivity = hasReceived && (peer.unlockTimestamps.isEmpty() || isConnectionTimedOut)
+
+    // 「元気です」「良くない」は受信から1時間経過で通常の「正常」表示に復帰
+    val isStatusRecent = peer.lastSeenTimestamp > 0L && (currentTime - peer.lastSeenTimestamp) < AppPreferences.ONE_HOUR_MS
 
     val (statusColor, statusBgColor, statusIcon, statusTitle) = when {
         !hasReceived -> Quadruple(
@@ -531,13 +539,13 @@ fun PeerSafetyCard(
             Icons.Default.Warning,
             "🚨 過去24時間 操作なし"
         )
-        peer.lastStatus == PacketType.STATUS_UNWELL -> Quadruple(
+        peer.lastStatus == PacketType.STATUS_UNWELL && isStatusRecent -> Quadruple(
             Color(0xFFE65100),
             Color(0xFFFFF3E0),
             Icons.Default.SentimentDissatisfied,
             "😣 良くない"
         )
-        peer.lastStatus == PacketType.STATUS_FINE -> Quadruple(
+        peer.lastStatus == PacketType.STATUS_FINE && isStatusRecent -> Quadruple(
             Color(0xFF2E7D32),
             Color(0xFFE8F5E9),
             Icons.Default.SentimentVerySatisfied,
@@ -547,7 +555,7 @@ fun PeerSafetyCard(
             Color(0xFF2E7D32),
             Color(0xFFE8F5E9),
             Icons.Default.CheckCircle,
-            "🟢 正常 (${peer.unlockCount24h}件 操作確認)"
+            "🟢 正常"
         )
     }
 
@@ -572,9 +580,10 @@ fun PeerSafetyCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = peer.name,
+                        text = peer.displayName,
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -609,28 +618,30 @@ fun PeerSafetyCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("24時間のスマホ操作", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                    Text("見守り状態", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = if (!hasReceived) "未受信" else if (isNoActivity) "0件 (無活動)" else "${peer.unlockCount24h}件",
+                        text = if (!hasReceived) "未受信" else if (isNoActivity) "要確認" else "活動確認済み",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isNoActivity) Color(0xFFD32F2F) else Color.Black
+                        fontWeight = FontWeight.Bold,
+                        color = if (isNoActivity) Color(0xFFD32F2F) else Color(0xFF2E7D32)
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("最終同期・受信日時", style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                    Text("最終同期・受信日時", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         text = if (hasReceived) fullTimeFormat.format(Date(peer.lastSeenTimestamp)) else "-",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -640,64 +651,8 @@ fun PeerSafetyCard(
                 Text(
                     text = "詳細: ${peer.lastMessage}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.DarkGray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-
-            // タイムスタンプ履歴の開閉
-            if (peer.unlockTimestamps.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { expandedTimestamps = !expandedTimestamps }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.DarkGray)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "直近の操作履歴 (${peer.unlockTimestamps.size}件)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.DarkGray
-                        )
-                    }
-                    Icon(
-                        if (expandedTimestamps) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color.DarkGray
-                    )
-                }
-
-                AnimatedVisibility(visible = expandedTimestamps) {
-                    val timeFormatShort = remember { SimpleDateFormat("HH:mm", Locale.JAPAN) }
-                    val sortedTimestamps = peer.unlockTimestamps.sortedDescending()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            text = "直近のロック解除:",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.DarkGray
-                        )
-                        val previewList = sortedTimestamps.take(10)
-                        val timesStr = previewList.joinToString(", ") { timeFormatShort.format(Date(it)) }
-                        Text(
-                            text = if (sortedTimestamps.size > 10) "$timesStr ... 他${sortedTimestamps.size - 10}件" else timesStr,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.DarkGray
-                        )
-                    }
-                }
             }
         }
     }

@@ -153,8 +153,11 @@ class FirestorePeerMessenger(
                 emptyList()
             }
 
-            // 新旧タイムスタンプをマージしてソート・重複除外
+            val cutoffTime = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+
+            // 新旧タイムスタンプをマージして過去24時間以内のものをソート・重複除外
             val mergedTimestamps = (existingTimestamps + newTimestamps)
+                .filter { it >= cutoffTime }
                 .distinct()
                 .sorted()
 
@@ -178,9 +181,11 @@ class FirestorePeerMessenger(
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            withTimeoutOrNull(15_000L) {
+            val result = withTimeoutOrNull(15_000L) {
                 docRef.set(data, SetOptions.merge()).awaitTask()
-            } != null
+                true
+            }
+            result == true
         } catch (e: Exception) {
             Log.e(tag, "Failed to send packet to Firestore: ${e.message}", e)
             false
@@ -225,14 +230,16 @@ class FirestorePeerMessenger(
                 "timestamp" to System.currentTimeMillis(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            withTimeoutOrNull(10_000L) {
+            val result = withTimeoutOrNull(10_000L) {
                 db.collection("groups")
                     .document(targetGroupName)
                     .collection("members")
                     .document(userId)
                     .set(data, SetOptions.merge())
                     .awaitTask()
-            } != null
+                true
+            }
+            result == true
         } catch (e: Exception) {
             Log.e(tag, "Failed to request join group: ${e.message}", e)
             false
@@ -252,14 +259,16 @@ class FirestorePeerMessenger(
                 "timestamp" to System.currentTimeMillis(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            withTimeoutOrNull(10_000L) {
+            val result = withTimeoutOrNull(10_000L) {
                 db.collection("groups")
                     .document(targetGroupName)
                     .collection("members")
                     .document(userId)
                     .set(data, SetOptions.merge())
                     .awaitTask()
-            } != null
+                true
+            }
+            result == true
         } catch (e: Exception) {
             Log.e(tag, "Failed to create group: ${e.message}", e)
             false
@@ -276,14 +285,16 @@ class FirestorePeerMessenger(
                 "memberStatus" to MemberStatus.APPROVED.name,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            withTimeoutOrNull(10_000L) {
+            val result = withTimeoutOrNull(10_000L) {
                 db.collection("groups")
                     .document(targetGroupName)
                     .collection("members")
                     .document(userId)
                     .set(data, SetOptions.merge())
                     .awaitTask()
-            } != null
+                true
+            }
+            result == true
         } catch (e: Exception) {
             Log.e(tag, "Failed to approve member: ${e.message}", e)
             false
@@ -300,14 +311,16 @@ class FirestorePeerMessenger(
                 "memberStatus" to MemberStatus.REJECTED.name,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            withTimeoutOrNull(10_000L) {
+            val result = withTimeoutOrNull(10_000L) {
                 db.collection("groups")
                     .document(targetGroupName)
                     .collection("members")
                     .document(userId)
                     .set(data, SetOptions.merge())
                     .awaitTask()
-            } != null
+                true
+            }
+            result == true
         } catch (e: Exception) {
             Log.e(tag, "Failed to reject member: ${e.message}", e)
             false
@@ -364,7 +377,10 @@ class FirestorePeerMessenger(
 
             @Suppress("UNCHECKED_CAST")
             val rawTimestamps = doc.get("unlockTimestamps") as? List<*>
-            val unlockTimestamps = rawTimestamps?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList()
+            val cutoffTime = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+            val unlockTimestamps = rawTimestamps?.mapNotNull { (it as? Number)?.toLong() }
+                ?.filter { it >= cutoffTime }
+                ?: emptyList()
 
             SafetyPacket(
                 packetId = packetId,

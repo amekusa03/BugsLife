@@ -207,10 +207,11 @@ fun MainScreen(
                 val index = currentPeers.indexOfFirst { it.id == updatedPeer.id }
                 if (index >= 0) {
                     currentPeers[index] = updatedPeer
+                } else {
+                    currentPeers.add(updatedPeer)
                 }
                 prefs.savePeers(currentPeers)
                 WatcherStateHolder.updatePeers(currentPeers)
-                onRequireServiceReload()
                 editingPeer = null
             },
             onDelete = { targetPeer ->
@@ -218,7 +219,6 @@ fun MainScreen(
                 currentPeers.removeAll { it.id == targetPeer.id }
                 prefs.savePeers(currentPeers)
                 WatcherStateHolder.updatePeers(currentPeers)
-                onRequireServiceReload()
                 editingPeer = null
             }
         )
