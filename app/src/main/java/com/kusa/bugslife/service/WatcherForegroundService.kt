@@ -337,6 +337,9 @@ class WatcherForegroundService : Service() {
         WatcherStateHolder.setTodayScreenOnCount(prefs.todayScreenOnCount)
         WatcherStateHolder.setLastLocalScreenOnTime(now)
 
+        // スマホ操作があったため、自身の無操作警告通知を解除
+        NotificationHelper.cancelSelfInactivityWarning(this)
+
         // スマホ操作があったため無操作アラームタイマーをリセット (now + timeoutDurationMillis)
         scheduleInactivityAlarm(this, now)
 
@@ -361,6 +364,7 @@ class WatcherForegroundService : Service() {
      * 即座にFirebaseのDBを更新し、成功したら内部ファイルのタイムスタンプをクリア
      */
     private fun handleSendStatus(type: PacketType, message: String) {
+        NotificationHelper.cancelSelfInactivityWarning(this)
         prefs.pendingStatus = type
         prefs.pendingStatusMessage = message
         WatcherStateHolder.setPendingStatus(type)
@@ -407,6 +411,11 @@ class WatcherForegroundService : Service() {
             val pendingTimestamps = prefs.getPendingUnlockTimestamps()
             val status = if (isDirectStatus) prefs.pendingStatus else null
             val message = if (isDirectStatus) prefs.pendingStatusMessage else ""
+            val nowTime = System.currentTimeMillis()
+            val isSelfInactivityAlert = isInactivityTrigger || (
+                prefs.lastLocalScreenOnTime > 0L &&
+                (nowTime - prefs.lastLocalScreenOnTime >= prefs.timeoutDurationMillis)
+            )
 
             val packet = SafetyPacket(
                 senderId = prefs.userId,
@@ -415,7 +424,8 @@ class WatcherForegroundService : Service() {
                 status = status,
                 memberStatus = prefs.myMemberStatus,
                 unlockTimestamps = pendingTimestamps,
-                timestamp = System.currentTimeMillis(),
+                isAlertTriggered = isSelfInactivityAlert,
+                timestamp = nowTime,
                 message = message
             )
 
@@ -469,6 +479,11 @@ class WatcherForegroundService : Service() {
                         detail = detailStr
                     )
                 )
+
+                if (isSelfInactivityAlert) {
+                    val hours = prefs.timeoutDurationMillis / (1000 * 60 * 60)
+                    NotificationHelper.showSelfInactivityWarning(this@WatcherForegroundService, hours)
+                }
 
                 WatcherStateHolder.emitUiEvent("✅ Firebase送信完了 (内部ログをクリア)")
                 Log.d(tag, "Firebase send success: pending timestamps cleared.")
@@ -528,6 +543,8 @@ class WatcherForegroundService : Service() {
 
             val isDirectStatusPacket = packet.type == PacketType.STATUS_FINE || packet.type == PacketType.STATUS_UNWELL
             val effectiveStatus = if (isDirectStatusPacket) packet.type else packet.status
+            val isNoActivity = packet.unlockTimestamps.isEmpty() && packet.type != PacketType.PING && packet.type != PacketType.ACK
+            val isAlert = packet.memberStatus == MemberStatus.APPROVED && (isNoActivity || packet.isAlertTriggered)
 
             prefs.updatePeerStatus(
                 senderId = packet.senderId,
@@ -535,7 +552,7 @@ class WatcherForegroundService : Service() {
                 status = effectiveStatus,
                 timestamp = packet.timestamp,
                 message = packet.message,
-                isAlert = false,
+                isAlert = isAlert,
                 memberStatus = packet.memberStatus,
                 unlockTimestamps = packet.unlockTimestamps
             )
@@ -543,8 +560,6 @@ class WatcherForegroundService : Service() {
             val updatedPeers = prefs.getPeers()
             WatcherStateHolder.updatePeers(updatedPeers)
             val peerDisplayName = updatedPeers.firstOrNull { it.id == packet.senderId }?.displayName ?: packet.senderName
-
-            val isNoActivity = packet.unlockTimestamps.isEmpty() && packet.type != PacketType.PING && packet.type != PacketType.ACK
 
             if (isNewPacket) {
                 val detailStr = buildString {
@@ -576,6 +591,18 @@ class WatcherForegroundService : Service() {
                         detail = detailStr
                     )
                 )
+
+                // 人的異常アラートの発火または解除
+                if (isAlert) {
+                    Log.w(tag, "🚨 Triggering NoActivity alert notification for $peerDisplayName")
+                    NotificationHelper.showNoActivityAlert(
+                        this@WatcherForegroundService,
+                        packet.senderId,
+                        peerDisplayName
+                    )
+                } else if (packet.unlockTimestamps.isNotEmpty() || isDirectStatusPacket) {
+                    NotificationHelper.cancelPeerAlert(this@WatcherForegroundService, packet.senderId)
+                }
 
                 // ステータス通知は、明示的なステータス送信パケット(STATUS_FINE / STATUS_UNWELL)を受信した時のみ発火
                 if (isDirectStatusPacket) {
@@ -625,13 +652,15 @@ class WatcherForegroundService : Service() {
 
         for (p in peersFromCloud) {
             val effectiveStatus = p.status ?: if (p.type == PacketType.STATUS_FINE || p.type == PacketType.STATUS_UNWELL) p.type else null
+            val isNoActivity = p.unlockTimestamps.isEmpty() && p.type != PacketType.PING && p.type != PacketType.ACK
+            val isAlert = p.memberStatus == MemberStatus.APPROVED && (isNoActivity || p.isAlertTriggered)
             prefs.updatePeerStatus(
                 senderId = p.senderId,
                 senderName = p.senderName,
                 status = effectiveStatus,
                 timestamp = p.timestamp,
                 message = p.message,
-                isAlert = false,
+                isAlert = isAlert,
                 memberStatus = p.memberStatus,
                 unlockTimestamps = p.unlockTimestamps
             )
@@ -642,25 +671,41 @@ class WatcherForegroundService : Service() {
 
         for (i in allPeers.indices) {
             val peer = allPeers[i]
-            val lastActivityTime = if (peer.unlockTimestamps.isNotEmpty()) {
-                maxOf(peer.lastSeenTimestamp, peer.lastUnlockTimestamp)
-            } else {
-                peer.lastSeenTimestamp
-            }
+            if (peer.memberStatus != MemberStatus.APPROVED) continue
 
-            if (lastActivityTime > 0L) {
-                val elapsed = now - lastActivityTime
-                if (elapsed >= timeoutMs && !peer.isAlertTriggered) {
-                    val elapsedHours = elapsed.toDouble() / (1000 * 60 * 60)
-                    Log.w(tag, "🚨 24h Inactivity Alert: No activity from ${peer.displayName} for ${elapsedHours}h")
-                    NotificationHelper.showNoActivityAlert(
-                        this@WatcherForegroundService,
-                        peer.id,
-                        peer.displayName
-                    )
-                    allPeers[i] = peer.copy(isAlertTriggered = true)
-                    hasChanges = true
-                }
+            val hasNoActivity = peer.unlockTimestamps.isEmpty()
+            val lastActivityTime = peer.lastUnlockTimestamp
+            val lastSeenTime = peer.lastSeenTimestamp
+
+            // 人的異常: 24時間操作なし (タイムスタンプ0件 または 最後の操作から24時間経過)
+            val isHumanAlert = hasNoActivity || (lastActivityTime > 0L && (now - lastActivityTime >= timeoutMs))
+            // 端末異常: 通信途絶 (最後の通信から24時間経過)
+            val isDeviceAlert = lastSeenTime > 0L && (now - lastSeenTime >= timeoutMs)
+
+            if (isHumanAlert && !peer.isAlertTriggered) {
+                Log.w(tag, "🚨 24h Inactivity Alert: No activity from ${peer.displayName}")
+                NotificationHelper.showNoActivityAlert(
+                    this@WatcherForegroundService,
+                    peer.id,
+                    peer.displayName
+                )
+                allPeers[i] = peer.copy(isAlertTriggered = true)
+                hasChanges = true
+            } else if (isDeviceAlert && !peer.isAlertTriggered) {
+                val elapsedHours = (now - lastSeenTime).toDouble() / (1000 * 60 * 60)
+                Log.w(tag, "⚠️ Device Connection Lost Alert: No communication from ${peer.displayName} for ${elapsedHours}h")
+                NotificationHelper.showInactivityAlert(
+                    this@WatcherForegroundService,
+                    peer.id,
+                    peer.displayName,
+                    elapsedHours
+                )
+                allPeers[i] = peer.copy(isAlertTriggered = true)
+                hasChanges = true
+            } else if (!isHumanAlert && !isDeviceAlert && peer.isAlertTriggered) {
+                NotificationHelper.cancelPeerAlert(this@WatcherForegroundService, peer.id)
+                allPeers[i] = peer.copy(isAlertTriggered = false)
+                hasChanges = true
             }
         }
 

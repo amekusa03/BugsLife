@@ -176,6 +176,7 @@ class FirestorePeerMessenger(
                 "status" to packet.status?.name,
                 "memberStatus" to packet.memberStatus.name,
                 "unlockTimestamps" to finalTimestamps,
+                "isAlertTriggered" to packet.isAlertTriggered,
                 "timestamp" to packet.timestamp,
                 "message" to packet.message,
                 "updatedAt" to FieldValue.serverTimestamp()
@@ -373,6 +374,7 @@ class FirestorePeerMessenger(
             val statusStr = doc.getString("status")
             val memberStatusStr = doc.getString("memberStatus")
             val message = doc.getString("message") ?: ""
+            val isAlertTriggered = doc.getBoolean("isAlertTriggered") ?: false
             val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
 
             @Suppress("UNCHECKED_CAST")
@@ -390,6 +392,7 @@ class FirestorePeerMessenger(
                 status = if (!statusStr.isNullOrBlank()) PacketType.fromString(statusStr) else null,
                 memberStatus = MemberStatus.fromString(memberStatusStr),
                 unlockTimestamps = unlockTimestamps,
+                isAlertTriggered = isAlertTriggered,
                 timestamp = timestamp,
                 message = message
             )

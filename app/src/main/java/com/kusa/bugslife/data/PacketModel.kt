@@ -44,6 +44,7 @@ data class SafetyPacket(
     val status: PacketType? = null,
     val memberStatus: MemberStatus = MemberStatus.APPROVED,
     val unlockTimestamps: List<Long> = emptyList(),
+    val isAlertTriggered: Boolean = false,
     val timestamp: Long = System.currentTimeMillis(),
     val message: String = ""
 ) {
@@ -57,6 +58,7 @@ data class SafetyPacket(
             obj.put("status", status.name)
         }
         obj.put("memberStatus", memberStatus.name)
+        obj.put("isAlertTriggered", isAlertTriggered)
         val timestampsArray = JSONArray()
         for (ts in unlockTimestamps) {
             timestampsArray.put(ts)
@@ -90,6 +92,7 @@ data class SafetyPacket(
                     status = parsedStatus,
                     memberStatus = MemberStatus.fromString(obj.optString("memberStatus", "APPROVED")),
                     unlockTimestamps = timestampsList,
+                    isAlertTriggered = obj.optBoolean("isAlertTriggered", false),
                     timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                     message = obj.optString("message", "")
                 )

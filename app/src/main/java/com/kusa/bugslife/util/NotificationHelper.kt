@@ -18,6 +18,7 @@ object NotificationHelper {
 
     const val NOTIFICATION_ID_SERVICE = 1001
     const val NOTIFICATION_ID_ALERT_BASE = 2000
+    const val NOTIFICATION_ID_SELF_INACTIVITY = 2999
     const val NOTIFICATION_ID_STATUS_BASE = 3000
 
     fun createNotificationChannels(context: Context) {
@@ -87,6 +88,64 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    /**
+     * 自身が24時間無操作になった場合の警告通知（見守られ側本人用）
+     */
+    fun showSelfInactivityWarning(
+        context: Context,
+        hours: Long
+    ) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            NOTIFICATION_ID_SELF_INACTIVITY,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERT)
+            .setContentTitle("⚠️ 安否確認: ${hours}時間スマートフォンの操作がありません")
+            .setContentText("見守り相手に活動停止状態が共有されています。")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "【安否確認のお願い】\n過去${hours}時間スマートフォンのロック解除等の操作が確認できていません。\n見守り相手に活動停止が通知されています。ご無事の場合は画面のロックを解除するか、アプリで「元気です」をタップしてください。"
+                )
+            )
+            .setSmallIcon(R.drawable.ic_notification_bug)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setVibrate(longArrayOf(0, 500, 200, 500, 200, 1000))
+            .build()
+
+        notificationManager.notify(NOTIFICATION_ID_SELF_INACTIVITY, notification)
+    }
+
+    /**
+     * 自身の無操作警告通知を解除
+     */
+    fun cancelSelfInactivityWarning(context: Context) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID_SELF_INACTIVITY)
+    }
+
+    /**
+     * 相手の安否アラート通知を解除（活動再開時）
+     */
+    fun cancelPeerAlert(context: Context, peerId: String) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID_ALERT_BASE + (peerId.hashCode() % 500))
+        notificationManager.cancel(NOTIFICATION_ID_ALERT_BASE + ((peerId + "_no_activity").hashCode() % 500))
     }
 
     /**
